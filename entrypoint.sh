@@ -22,13 +22,12 @@ APPID="${APPID:-581330}"
 : "${SS_HOSTNAME:=Chourmovs ISS (PvP)}"
 : "${SS_MAXPLAYERS:=28}"               # <= 28 recommandé en PvP
 
-# ─────────────────────────────────────────
 # Mode / Map / Scénario (VERSUS par défaut)
-# ─────────────────────────────────────────
-: "${SS_GAME_MODE:=Push}"              # Push | Firefight | Skirmish | Domination
+: "${SS_GAME_MODE:=Push}"
 : "${SS_MAP:=Crossing}"
-: "${SS_SCENARIO:=Scenario_Farmhouse_Push_Security}"   # ← fallback safe
-: "${SS_MAPCYCLE:=}"                   # évite "unbound variable" si non fourni
+: "${SS_SCENARIO:=Scenario_Farmhouse_Push_Security}"   # ← fallback anti‑range
+: "${SS_MAPCYCLE:=}"
+
 
 
 # ─────────────────────────────────────────
