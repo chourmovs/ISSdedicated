@@ -5,27 +5,61 @@ STEAMCMDDIR="${STEAMCMDDIR:-/opt/steamcmd}"
 SANDSTORM_ROOT="${SANDSTORM_ROOT:-/opt/sandstorm}"
 APP_BIN="${SANDSTORM_ROOT}/Insurgency/Binaries/Linux/InsurgencyServer-Linux-Shipping"
 
-# Mise à jour/Installation si demandé
-if [[ "${AUTO_UPDATE:-1}" == "1" ]]; then
-  "${STEAMCMDDIR}/steamcmd.sh" +login anonymous \
-    +force_install_dir "${SANDSTORM_ROOT}" \
-    +app_update "${STEAMAPPID:-581330}" validate +quit
-fi
-
-# S’assurer que les fichiers de conf existent (si volume vierge)
 GAME_INI="${SANDSTORM_ROOT}/Insurgency/Saved/Config/LinuxServer/Game.ini"
 MAPCYCLE_TXT="${SANDSTORM_ROOT}/Insurgency/Config/Server/MapCycle.txt"
 
-[[ -f "${GAME_INI}" ]] || cp -f "${SANDSTORM_ROOT}/Insurgency/Saved/Config/LinuxServer/Game.ini" "${GAME_INI}"
-[[ -f "${MAPCYCLE_TXT}" ]] || cp -f "${SANDSTORM_ROOT}/Insurgency/Config/Server/MapCycle.txt" "${MAPCYCLE_TXT}"
+# --- Secrets via Docker Swarm (si présents) : /run/secrets/<name> ---
+read_secret_file() {
+  local var="$1" file="$2"
+  if [[ -z "${!var:-}" && -f "$file" ]]; then
+    export "$var"="$(tr -d '\r' < "$file")"
+  fi
+}
+read_secret_file STEAM_USER /run/secrets/steam_user
+read_secret_file STEAM_PASS /run/secrets/steam_pass
+read_secret_file STEAM_2FA  /run/secrets/steam_2fa
 
-# Patch dynamique de Game.ini selon variables d'env
-# (on remplace les valeurs clés si présentes)
-sed -i "s/^FriendlyBotQuota=.*/FriendlyBotQuota=${FRIENDLY_BOT_QUOTA:-6}/" "${GAME_INI}" || true
-sed -i "s/^MinimumEnemies=.*/MinimumEnemies=${MIN_ENEMIES:-10}/" "${GAME_INI}" || true
-sed -i "s/^MaximumEnemies=.*/MaximumEnemies=${MAX_ENEMIES:-24}/" "${GAME_INI}" || true
+# --- Dépose config par défaut si volume vierge (si tu as copié des defaults/) ---
+if [[ ! -f "$GAME_INI" && -f "/defaults/Game.ini" ]]; then
+  cp -f /defaults/Game.ini "$GAME_INI"
+fi
+if [[ ! -f "$MAPCYCLE_TXT" && -f "/defaults/MapCycle.txt" ]]; then
+  cp -f /defaults/MapCycle.txt "$MAPCYCLE_TXT"
+fi
 
-# Lancement
+# --- Patch dynamique selon env ---
+sed -i "s/^FriendlyBotQuota=.*/FriendlyBotQuota=${FRIENDLY_BOT_QUOTA:-6}/" "$GAME_INI" || true
+sed -i "s/^MinimumEnemies=.*/MinimumEnemies=${MIN_ENEMIES:-10}/" "$GAME_INI" || true
+sed -i "s/^MaximumEnemies=.*/MaximumEnemies=${MAX_ENEMIES:-24}/" "$GAME_INI" || true
+
+# --- Construction des arguments de login SteamCMD ---
+LOGIN_ARGS=()
+if [[ -n "${STEAM_USER:-}" && -n "${STEAM_PASS:-}" ]]; then
+  # 2FA optionnel : +login user pass [code]
+  if [[ -n "${STEAM_2FA:-}" ]]; then
+    LOGIN_ARGS=(+login "${STEAM_USER}" "${STEAM_PASS}" "${STEAM_2FA}")
+  else
+    LOGIN_ARGS=(+login "${STEAM_USER}" "${STEAM_PASS}")
+  fi
+else
+  LOGIN_ARGS=(+login anonymous)
+fi
+
+# --- Update/Install (à chaque start si AUTO_UPDATE=1) ---
+if [[ "${AUTO_UPDATE:-1}" == "1" ]]; then
+  # Force la plateforme Linux et coupe en cas d’échec
+  "${STEAMCMDDIR}/steamcmd.sh" +@sSteamCmdForcePlatformType linux +@ShutdownOnFailedCommand 1 +@NoPromptForPassword 1 \
+    "${LOGIN_ARGS[@]}" \
+    +force_install_dir "${SANDSTORM_ROOT}" \
+    +app_update "${STEAMAPPID:-581330}" validate \
+    +quit
+fi
+
+# --- Checks utiles (log informatif) ---
+du -sh "${SANDSTORM_ROOT}" || true
+ls -1 "${SANDSTORM_ROOT}/Insurgency/Content/Paks" 2>/dev/null | wc -l || true
+
+# --- Lancement serveur ---
 cd "${SANDSTORM_ROOT}/Insurgency/Binaries/Linux"
 
 PORT_ARG="-Port=${SERVER_PORT:-27102}"
