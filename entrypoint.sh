@@ -27,8 +27,9 @@ APPID="${APPID:-581330}"
 # ─────────────────────────────────────────
 : "${SS_GAME_MODE:=Push}"              # Push | Firefight | Skirmish | Domination
 : "${SS_MAP:=Crossing}"
-: "${SS_SCENARIO:=Scenario_Crossing_Push_Security}"   # doit matcher le mode
+: "${SS_SCENARIO:=Scenario_Farmhouse_Push_Security}"   # ← fallback safe
 : "${SS_MAPCYCLE:=}"                   # évite "unbound variable" si non fourni
+
 
 # ─────────────────────────────────────────
 # Bots (VERSUS)
@@ -166,7 +167,7 @@ echo "   → Game.ini écrit (${SS_GAME_MODE})"
 # ─────────────────────────────────────────
 cd "${GAMEDIR}/Insurgency/Binaries/Linux"
 
-LAUNCH_MAP="${SS_MAP}?Scenario=${SS_SCENARIO}?MaxPlayers=${SS_MAXPLAYERS}"
+LAUNCH_URL="${SS_SCENARIO}?MaxPlayers=${SS_MAXPLAYERS}"
 
 # Flags XP (optionnels) — uniquement si tokens fournis et RCON_PASSWORD vide
 XP_ARGS=()
@@ -178,7 +179,7 @@ else
 fi
 
 exec ./InsurgencyServer-Linux-Shipping \
-  "${LAUNCH_MAP}" \
+  "${LAUNCH_URL}" \
   -hostname="${SS_HOSTNAME}" \
   -Port="${PORT}" -QueryPort="${QUERYPORT}" -BeaconPort="${BEACONPORT}" \
   -Rcon ${RCON_PASSWORD:+-RconPassword="${RCON_PASSWORD}"} \
