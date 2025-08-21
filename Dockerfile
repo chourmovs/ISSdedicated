@@ -17,18 +17,18 @@ RUN apt-get update && \
     useradd -m steam && \
     rm -rf /var/lib/apt/lists/*
 
-# SteamCMD install
+# SteamCMD install (en root)
 WORKDIR /home/steam
 RUN mkdir -p /home/steam/steamcmd && \
     cd /home/steam/steamcmd && \
     curl -sSL https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
-      | tar -xz
+      | tar -xz && \
+    chmod -R a+rx /home/steam/steamcmd   # ← garantit l’exécution
 
-# Create Sandstorm dirs as root (⚠️ avant USER steam)
+# Dossier serveur + ownership
 RUN mkdir -p /opt/sandstorm/Insurgency/Saved/Config/LinuxServer && \
     chown -R steam:steam /opt/sandstorm
 
-# Switch to steam user
 USER steam
 
 # Copy entrypoint
