@@ -25,8 +25,13 @@ RUN mkdir -p /home/steam/steamcmd && \
     curl -sSL https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
       | tar -xz
 
-# Create Sandstorm dirs
-RUN mkdir -p /opt/sandstorm/Insurgency/Saved/Config/LinuxServer
+# Create Sandstorm dirs as root
+RUN mkdir -p /opt/sandstorm/Insurgency/Saved/Config/LinuxServer \
+ && chown -R steam:steam /opt/sandstorm
+
+# Switch user
+USER steam
+WORKDIR /home/steam
 
 # Copy entrypoint
 COPY --chown=steam:steam entrypoint.sh /entrypoint.sh
@@ -34,3 +39,4 @@ RUN chmod +x /entrypoint.sh
 
 WORKDIR /opt/sandstorm
 ENTRYPOINT ["/usr/bin/tini", "--", "/entrypoint.sh"]
+
