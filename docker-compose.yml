@@ -1,28 +1,75 @@
+version: "3.9"
+
 services:
   sandstorm:
-    build: .
+    image: chourmovs/ins-sandstorm:latest
     container_name: sandstorm
-    environment:
-      STEAM_USER: "anonymous"   # ou "anonymous"
-      STEAM_PASS: ""  # vide si anonymous
-      AUTO_UPDATE: "1"
-      PORT: "27102"
-      QUERYPORT: "27132"
-      RCON_PASSWORD: "MonSuperMotDePasse!"
-      EXTRA_ARGS: '-MaxPlayers=16'
-    ports:
-      - "27102:27102/udp"
-      - "27103:27103/udp"
-      - "27132:27132/udp"
-      - "15000:15000/udp"
-      - "27015:27015/tcp"
-    volumes:
-      - steam_auth:/home/steam/Steam
-      - sandstorm_saved:/opt/sandstorm/Insurgency/Saved
-      - sandstorm_cfg:/opt/sandstorm/Insurgency/Saved/Config/LinuxServer
     restart: unless-stopped
 
-volumes:
-  steam_auth:
-  sandstorm_saved:
-  sandstorm_cfg:
+    # >>> Ports (expose ce dont tu as besoin)
+    ports:
+      - "27102:27102/udp"  # Game
+      - "27131:27131/udp"  # Query
+      - "15000:15000/udp"  # Beacon
+      - "27015:27015/tcp"  # RCON (si tu utilises un client TCP)
+
+    # >>> Volumes persistants (bind mounts conseillés)
+    volumes:
+      - /opt/sandstorm:/opt/sandstorm
+      - /opt/steam:/home/steam/Steam
+
+    # >>> User 1000:1000 (steam)
+    user: "1000:1000"
+
+    # >>> Variables “max options”
+    environment:
+      # --- Mises à jour / Réseau ---
+      AUTO_UPDATE: "1"
+      PORT: "27102"
+      QUERYPORT: "27131"
+      BEACONPORT: "15000"
+      RCON_PASSWORD: "ChangeMe!"
+
+      # --- Identité / Slots ---
+      SS_HOSTNAME: "Chourmovs ISS"
+      SS_MAXPLAYERS: "16"
+
+      # --- Carte / Scénario / Mode ---
+      SS_MAP: "Farmhouse"
+      SS_SCENARIO: "Scenario_Farmhouse_Checkpoint_Security"
+      SS_GAME_MODE: "Checkpoint"
+
+      # --- BOTS ---
+      SS_BOTS_ENABLED: "1"       # 1/0
+      SS_BOT_NUM: "10"           # nombre fixe
+      SS_BOT_QUOTA: "1.0"        # ratio bots/joueur (si applicable)
+      SS_BOT_DIFFICULTY: "0.7"   # 0.0 – 1.0
+
+      # --- Supply / Rythme ---
+      SS_INITIAL_SUPPLY: "20"
+      SS_MAX_SUPPLY: "30"
+
+      # --- Qualité de vie ---
+      SS_FRIENDLY_FIRE_SCALE: "0.2"
+      SS_KILL_FEED: "1"
+      SS_KILL_CAMERA: "0"
+      SS_VOICE_ENABLED: "1"
+
+      # --- Durées ---
+      SS_ROUND_TIME: "900"
+      SS_POST_ROUND_TIME: "15"
+
+      # --- Vote ---
+      SS_VOTE_ENABLED: "1"
+      SS_VOTE_PERCENT: "0.6"
+
+      # --- MapCycle multi-lignes (facultatif) ---
+      # Chaque ligne = un scenario ID valide
+      SS_MAPCYCLE: |
+        Scenario_Farmhouse_Checkpoint_Security
+        Scenario_Summit_Checkpoint_Security
+        Scenario_Refinery_Checkpoint_Security
+
+    stop_grace_period: 30s
+    stdin_open: true
+    tty: true
