@@ -113,64 +113,69 @@ echo "🗺️  Writing MapCycle..."
 } > "${MAPCYCLE}"
 
 # ─────────────────────────────────────────
-# (C) Génération Game.ini (100% variables)
+# (C) Génération Game.ini orienté CHECKPOINT
 # ─────────────────────────────────────────
 echo "🧩 Writing Game.ini..."
 cat > "${GAMEINI}" <<EOF
+; ------------------------------------------------------------------
+; Insurgency Sandstorm - Game.ini (orienté COOP / CHECKPOINT)
+; NOTE: Lancer un scénario Checkpoint (ex: Scenario_Farmhouse_Checkpoint_Security)
+;       pour que ces paramètres s'appliquent.
+; ------------------------------------------------------------------
+
 [/Script/Insurgency.INSGameMode]
-; ====== Socle bas niveau & QOL ======
-; Kill feed (1/0), Kill cam (1/0), Voix (1/0)
+; ===== QOL générique =====
 bKillFeed=${SS_KILL_FEED}
 bKillCamera=${SS_KILL_CAMERA}
 bVoiceEnabled=${SS_VOICE_ENABLED}
 
-; Friendly fire (attention : surtout PVP, certains modes coop l’ignorent)
-FriendlyFireDamageScale=${SS_FRIENDLY_FIRE_SCALE}
+; Friendly fire global (plutôt PVP ; en coop souvent ignoré selon le mode)
+; On force la désactivation explicite comme demandé :
+bAllowFriendlyFire=${SS_ALLOW_FF:-False}
+; Échelle de dégâts FF si jamais activé côté serveur / autre mode :
+FriendlyFireDamageScale=${SS_FRIENDLY_FIRE_SCALE:-0.0}
 
-; Durées génériques (selon modes)
+; Timings et limites
+GameStartingIntermissionTime=${SS_INTERMISSION_TIME:-10}
+RoundLimit=${SS_ROUND_LIMIT:-1}
 RoundTime=${SS_ROUND_TIME}
 PostRoundTime=${SS_POST_ROUND_TIME}
 
-; ====== COOP / CHECKPOINT ======
-bBots=${SS_BOTS_ENABLED}
-NumBots=${SS_BOT_NUM}
-BotQuota=${SS_BOT_QUOTA}
-BotDifficulty=${SS_BOT_DIFFICULTY}
-
-InitialSupply=${SS_INITIAL_SUPPLY}
-MaxSupply=${SS_MAX_SUPPLY}
-
-[/Script/Insurgency.INSCoopMode]
-; Zone souvent lue pour les réglages coop (selon versions)
-bBots=${SS_BOTS_ENABLED}
-NumBots=${SS_BOT_NUM}
-BotQuota=${SS_BOT_QUOTA}
-BotDifficulty=${SS_BOT_DIFFICULTY}
+; ===== NE RIEN DÉFINIR ICI sur les bots pour CHECKPOINT =====
+; (NumBots, BotQuota, BotDifficulty laissés absents pour éviter les conflits)
 
 [/Script/Insurgency.INSCheckpointGameMode]
-; Checkpoint spécifique (certains doublons sont bénins)
-bBots=${SS_BOTS_ENABLED}
-NumBots=${SS_BOT_NUM}
-BotQuota=${SS_BOT_QUOTA}
-BotDifficulty=${SS_BOT_DIFFICULTY}
-InitialSupply=${SS_INITIAL_SUPPLY}
-MaxSupply=${SS_MAX_SUPPLY}
+; ===== ENNEMIS (COOP) =====
+; IMPORTANT: pas de NumBots/BotQuota/BotDifficulty ici.
+bBots=True
+MinimumEnemies=${SS_MIN_ENEMIES:-20}
+MaximumEnemies=${SS_MAX_ENEMIES:-20}
+SoloEnemies=${SS_SOLO_ENEMIES:-0}
 
-; ====== Vote ======
-bAllowVoting=${SS_VOTE_ENABLED}
-RequiredVotePercentage=${SS_VOTE_PERCENT}
+; Options utiles / stables en coop
+bBotsUseVehicleInsertion=${SS_BOTS_USE_VEHICLE:-True}
+RespawnDPR=${SS_RESPAWN_DPR:-0.5}
+DefendCaptureTime=${SS_DEFEND_CAPTURE_TIME:-45}
 
-; ====== Section avancée (optionnelle) ======
-; Tu peux mettre ici des mutators & réglages additionnels.
-; Exemple (ligne commentée) :
-Mutators=Hardcore,NoResupply
-ObjectiveCaptureSpeedScale=1.0
-TeamKillLimit=3
-bDeadSayAll=true
+; Supply (facultatif en coop ; mets-les si tu les utilises vraiment)
+; InitialSupply=${SS_INITIAL_SUPPLY}
+; MaxSupply=${SS_MAX_SUPPLY}
 
+[/Script/Insurgency.INSCoopMode]
+; ===== BOTS ALLIÉS & COMPORTEMENTS =====
+bKickIdleSpectators=${SS_KICK_IDLE_SPECTATORS:-True}
+FriendlyBotQuota=${SS_FRIENDLY_BOT_QUOTA:-0}   ; mets 6 si tu veux des alliés
+
+; ===== (Optionnel) Section avancée =====
+; ⚠️ Évite les mutators qui réduisent la pop (p.ex. Hardcore selon version)
+; Mutators=Hardcore,NoResupply
+; ObjectiveCaptureSpeedScale=1.0
+; TeamKillLimit=3
+; bDeadSayAll=true
 EOF
 
-echo "✅ Game.ini & MapCycle.txt written."
+echo "✅ Game.ini écrit (oriented Checkpoint). Pense à redémarrer le serveur."
+
 
 # ─────────────────────────────────────────
 # (D) Lancement serveur
