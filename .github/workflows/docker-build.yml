@@ -8,19 +8,17 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write
+      # packages: write  # pas nécessaire pour Docker Hub
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set image name (lowercase)
+      - name: Set image name (lowercase for Docker Hub)
         id: img
         run: |
-          OWNER_LC="${GITHUB_REPOSITORY_OWNER@L}"
+          USER_LC="$(echo "${{ secrets.DOCKERHUB_USER }}" | tr '[:upper:]' '[:lower:]')"
           REPO_LC="$(echo "${GITHUB_REPOSITORY#*/}" | tr '[:upper:]' '[:lower:]')"
-          # Option: fixe un nom d’image plus court si tu veux
-          IMAGE="ghcr.io/${OWNER_LC}/${REPO_LC}"
-          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "image=docker.io/${USER_LC}/${REPO_LC}" >> "$GITHUB_OUTPUT"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -33,7 +31,6 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USER }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-
 
       - name: Extract metadata (tags, labels)
         id: meta
