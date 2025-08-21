@@ -1,42 +1,42 @@
-FROM debian:bookworm-slim
+FROM debian:bullseye-slim
 
-# Variables globales
-ENV STEAMCMDDIR=/home/steam/steamcmd \
-    GAMEDIR=/opt/sandstorm \
-    APPID=581330
-
-# Dépendances minimales
+# Préparer environnement
 RUN apt-get update && apt-get install -y \
     lib32gcc-s1 \
-    lib32stdc++6 \
-    wget \
     curl \
-    unzip \
     ca-certificates \
-    locales \
     && rm -rf /var/lib/apt/lists/*
 
-# Utilisateur non-root
-RUN useradd -m steam && mkdir -p ${GAMEDIR} ${STEAMCMDDIR} && \
-    chown -R steam:steam /home/steam ${GAMEDIR}
+# Créer user non-root
+RUN useradd -m steam
+
+# Installer steamcmd
+RUN mkdir -p /home/steam/steamcmd && \
+    cd /home/steam/steamcmd && \
+    curl -sSL https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+    | tar -xz && \
+    chown -R steam:steam /home/steam
 
 USER steam
 WORKDIR /home/steam
 
-# Installer SteamCMD
-RUN wget https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz -O steamcmd.tar.gz \
-    && mkdir -p ${STEAMCMDDIR} \
-    && tar -xvzf steamcmd.tar.gz -C ${STEAMCMDDIR} \
-    && rm steamcmd.tar.gz
+# Variables par défaut
+ENV GAMEDIR=/opt/sandstorm \
+    STEAMCMDDIR=/home/steam/steamcmd \
+    APPID=581330
 
 # Copier entrypoint
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+COPY --chown=steam:steam entrypoint.sh /home/steam/entrypoint.sh
+RUN chmod +x /home/steam/entrypoint.sh
 
-WORKDIR ${GAMEDIR}
-VOLUME ["${GAMEDIR}"]
+# Créer dossier jeu
+RUN mkdir -p ${GAMEDIR}
 
-# Ports : Game / Query / Beacon / RCON
+# Exposer ports
 EXPOSE 27102/udp 27131/udp 15000/udp 27015/tcp
 
-ENTRYPOINT ["/entrypoint.sh"]
+# Volumes (configs persistants)
+VOLUME ["${GAMEDIR}"]
+
+# Entrypoint
+ENTRYPOINT ["/home/steam/entrypoint.sh"]
