@@ -7,7 +7,7 @@ set -euo pipefail
 GAMEDIR="${GAMEDIR:-/opt/sandstorm}"
 CFGDIR="${GAMEDIR}/Insurgency/Saved/Config/LinuxServer"
 GAMEINI="${CFGDIR}/Game.ini"
-MAPCYCLE="${CFGDIR}/MapCycle.txt" 
+MAPCYCLE="${CFGDIR}/MapCycle.txt"
 STEAMCMDDIR="${STEAMCMDDIR:-/home/steam/steamcmd}"
 APPID="${APPID:-581330}"
 
@@ -22,13 +22,19 @@ APPID="${APPID:-581330}"
 : "${SS_HOSTNAME:=Chourmovs ISS (PvP)}"
 : "${SS_MAXPLAYERS:=28}"               # <= 28 recommandé en PvP
 
+# ─────────────────────────────────────────
 # Mode / Map / Scénario (VERSUS par défaut)
-: "${SS_GAME_MODE:=Push}"
-: "${SS_MAP:=Crossing}"
-: "${SS_SCENARIO:=Scenario_Farmhouse_Push_Security}"   # ← fallback anti‑range
-: "${SS_MAPCYCLE:=}"
+# ─────────────────────────────────────────
+: "${SS_GAME_MODE:=Push}"              # Push | Firefight | Skirmish | Domination
+: "${SS_MAP:=Crossing}"                # informatif uniquement
+: "${SS_SCENARIO:=}"                   # on gère le fallback juste après
+: "${SS_MAPCYCLE:=}"                   # évite "unbound variable" si absent
 
-
+# Fallback anti-range si scénario vide ou invalide
+if [[ -z "${SS_SCENARIO}" || ! "${SS_SCENARIO}" =~ ^Scenario_ ]]; then
+  echo "⚠️  SS_SCENARIO vide/invalide ('${SS_SCENARIO:-<unset>}'), fallback → Scenario_Farmhouse_Push_Security"
+  SS_SCENARIO="Scenario_Farmhouse_Push_Security"
+fi
 
 # ─────────────────────────────────────────
 # Bots (VERSUS)
@@ -115,11 +121,8 @@ fi
 # ─────────────────────────────────────────
 echo "🗺️  Writing MapCycle..."
 if [ -n "${SS_MAPCYCLE}" ]; then
-  {
-    # pas de commentaires ni lignes vides → certain parseurs sont chatouilleux
-    echo "${SS_MAPCYCLE}" | tr '\r' '\n' | sed '/^\s*$/d'
-  } > "${MAPCYCLE}"
-  echo "   → MapCycle.txt écrit ($(wc -l < "${MAPCYCLE}") lignes)"
+  echo "${SS_MAPCYCLE}" | tr '\r' '\n' | sed '/^\s*$/d' > "${MAPCYCLE}"
+  echo "   → ${MAPCYCLE} écrit ($(wc -l < "${MAPCYCLE}") lignes)"
 else
   echo "   → Aucun SS_MAPCYCLE fourni, on saute l'écriture."
 fi
@@ -128,7 +131,6 @@ fi
 # Game.ini (VERSUS)
 # ─────────────────────────────────────────
 echo "🧩 Writing Game.ini..."
-# Choix de la section en fonction du mode PvP
 MODE_UPPER="$(echo "${SS_GAME_MODE}" | tr '[:lower:]' '[:upper:]')"
 case "${MODE_UPPER}" in
   PUSH)       MODE_SECTION="/Script/Insurgency.INSPushGameMode" ;;
@@ -162,11 +164,25 @@ EOF
 echo "   → Game.ini écrit (${SS_GAME_MODE})"
 
 # ─────────────────────────────────────────
-# Lancement serveur
+# Déduction de l'asset à partir du SCENARIO (anti-range)
+# ─────────────────────────────────────────
+scenario_core="$(printf '%s' "${SS_SCENARIO#Scenario_}" | cut -d'_' -f1)"
+case "${scenario_core}" in
+  Crossing)   MAP_ASSET="Canyon"   ;;  # nom interne
+  Hideout)    MAP_ASSET="Town"     ;;
+  Hillside)   MAP_ASSET="Sinjar"   ;;
+  Refinery)   MAP_ASSET="Oilfield" ;;
+  *)          MAP_ASSET="${scenario_core}" ;;  # Farmhouse, Summit, Precinct, Tell, PowerPlant, Outskirts, Ministry, Bab/Citadel...
+esac
+echo "🧭  Scenario=${SS_SCENARIO}  →  Asset=${MAP_ASSET}"
+
+# ─────────────────────────────────────────
+# Lancement serveur (asset + scénario)
 # ─────────────────────────────────────────
 cd "${GAMEDIR}/Insurgency/Binaries/Linux"
 
-LAUNCH_URL="${SS_SCENARIO}?MaxPlayers=${SS_MAXPLAYERS}"
+LAUNCH_URL="${MAP_ASSET}?Scenario=${SS_SCENARIO}?MaxPlayers=${SS_MAXPLAYERS}"
+echo "▶️  Launch: ${LAUNCH_URL}"
 
 # Flags XP (optionnels) — uniquement si tokens fournis et RCON_PASSWORD vide
 XP_ARGS=()
