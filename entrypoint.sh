@@ -1,7 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
+# ─────────────────────────────────────────
 # Dossiers / chemins
+# ─────────────────────────────────────────
 GAMEDIR="${GAMEDIR:-/opt/sandstorm}"
 CFGDIR="${GAMEDIR}/Insurgency/Saved/Config/LinuxServer"
 GAMEINI="${CFGDIR}/Game.ini"
@@ -9,30 +11,62 @@ MAPCYCLE="${GAMEDIR}/Insurgency/Config/Server/MapCycle.txt"
 STEAMCMDDIR="${STEAMCMDDIR:-/home/steam/steamcmd}"
 APPID="${APPID:-581330}"
 
-# Valeurs par défaut
+# ─────────────────────────────────────────
+# Valeurs par défaut (réseau / identité)
+# ─────────────────────────────────────────
 : "${AUTO_UPDATE:=1}"
 : "${PORT:=27102}"
 : "${QUERYPORT:=27131}"
 : "${BEACONPORT:=15000}"
-: "${RCON_PASSWORD:=ChangeMe!}"
-: "${SS_HOSTNAME:=Chourmovs ISS}"
-: "${SS_MAXPLAYERS:=16}"
+: "${RCON_PASSWORD:=}"                 # ← vide si tu veux XP officiel
+: "${SS_HOSTNAME:=Chourmovs ISS (PvP)}"
+: "${SS_MAXPLAYERS:=28}"               # <= 28 recommandé en PvP
 
-# Map / mode
-: "${SS_MAP:=Farmhouse}"
-: "${SS_SCENARIO:=Scenario_Farmhouse_Checkpoint_Security}"
-: "${SS_GAME_MODE:=Checkpoint}"
+# ─────────────────────────────────────────
+# Mode / Map / Scénario (VERSUS par défaut)
+# ─────────────────────────────────────────
+: "${SS_GAME_MODE:=Push}"              # Push | Firefight | Skirmish | Domination
+: "${SS_MAP:=Crossing}"
+: "${SS_SCENARIO:=Scenario_Crossing_Push_Security}"   # doit matcher le mode
+: "${SS_MAPCYCLE:=}"                   # évite "unbound variable" si non fourni
 
-# Bots etc. (tes variables déjà définies plus loin, inchangées)
+# ─────────────────────────────────────────
+# Bots (VERSUS)
+# ─────────────────────────────────────────
+: "${SS_BOTS_ENABLED:=1}"
+: "${SS_BOT_NUM:=12}"
+: "${SS_BOT_QUOTA:=1.0}"
+: "${SS_BOT_DIFFICULTY:=0.7}"
+
+# ─────────────────────────────────────────
+# QOL / Timings / Vote
+# ─────────────────────────────────────────
+: "${SS_KILL_FEED:=1}"
+: "${SS_KILL_CAMERA:=0}"
+: "${SS_VOICE_ENABLED:=1}"
+: "${SS_FRIENDLY_FIRE_SCALE:=0.2}"
+: "${SS_ROUND_TIME:=900}"
+: "${SS_POST_ROUND_TIME:=15}"
+: "${SS_VOTE_ENABLED:=1}"
+: "${SS_VOTE_PERCENT:=0.6}"
+
+# ─────────────────────────────────────────
+# Tokens XP (optionnels)
+# ─────────────────────────────────────────
+: "${GSLT_TOKEN:=}"                    # AppID 581320
+: "${GAMESTATS_TOKEN:=}"               # https://gamestats.sandstorm.game
 
 echo "▶️ Starting Insurgency Sandstorm Dedicated Server...
 
   PORT=${PORT} | QUERYPORT=${QUERYPORT} | BEACONPORT=${BEACONPORT}
-  RCON_PASSWORD=******** | AUTO_UPDATE=${AUTO_UPDATE}
+  RCON_PASSWORD=$([ -n "${RCON_PASSWORD}" ] && echo '********' || echo '(empty)')
+  AUTO_UPDATE=${AUTO_UPDATE}
   MAP=${SS_MAP} | SCENARIO=${SS_SCENARIO} | MODE=${SS_GAME_MODE}
 "
 
-# ── Création robuste des dossiers nécessaires (avec messages utiles)
+# ─────────────────────────────────────────
+# Préparation FS (permissions / dossiers)
+# ─────────────────────────────────────────
 need_paths=(
   "${GAMEDIR}"
   "${GAMEDIR}/Insurgency"
@@ -41,35 +75,28 @@ need_paths=(
   "${GAMEDIR}/Insurgency/Config/Server"
   "${CFGDIR}"
 )
-
 for p in "${need_paths[@]}"; do
   if [ ! -d "$p" ]; then
-    if mkdir -p "$p" 2>/dev/null; then
-      :
-    else
+    mkdir -p "$p" || {
       echo "❌ Permission refusée pour créer: $p"
-      echo "   ➜ Vérifie que le volume est possédé par uid:gid 1000:1000."
-      echo "   ➜ Astuce: exécute le service 'fixperms' (voir stack) ou la commande one-shot chown."
-      sleep 3
+      echo "   ➜ chown -R 1000:1000 ${GAMEDIR} /home/steam/Steam"
       exit 1
-    fi
+    }
   fi
 done
-
-# Sécurité: refuser de continuer si on ne peut pas écrire
-echo "write-test" > "${GAMEDIR}/.writetest" 2>/dev/null || {
-  echo "❌ Impossible d'écrire dans ${GAMEDIR} (problème de permissions)."
-  echo "   ➜ Corrige les droits (chown -R 1000:1000) puis relance."
+echo "write-test" > "${GAMEDIR}/.writetest" || {
+  echo "❌ Impossible d'écrire dans ${GAMEDIR} (permissions)."
   exit 1
 }
 rm -f "${GAMEDIR}/.writetest"
 
-# ── Auto-update SteamCMD (avec retries anti-0x602)
+# ─────────────────────────────────────────
+# Auto-update SteamCMD (avec retry)
+# ─────────────────────────────────────────
 if [ "${AUTO_UPDATE}" = "1" ]; then
   echo "📥 Updating server via SteamCMD..."
-  tries=4
-  i=1
-  while [ $i -le $tries ]; do
+  tries=3
+  for i in $(seq 1 $tries); do
     if "${STEAMCMDDIR}/steamcmd.sh" +@sSteamCmdForcePlatformType linux \
         +force_install_dir "${GAMEDIR}" \
         +login anonymous \
@@ -77,118 +104,83 @@ if [ "${AUTO_UPDATE}" = "1" ]; then
         +quit; then
       break
     fi
-    echo "⚠️  SteamCMD validate failed (try $i/${tries}). Retrying without validate..."
-    if "${STEAMCMDDIR}/steamcmd.sh" +@sSteamCmdForcePlatformType linux \
-        +force_install_dir "${GAMEDIR}" \
-        +login anonymous \
-        +app_update "${APPID}" \
-        +quit; then
-      break
-    fi
-    if [ $i -eq $tries ]; then
-      echo "❌ SteamCMD update failed after ${tries} tries — I will continue if the server files already exist."
-      break
-    fi
+    echo "⚠️  SteamCMD validate failed (try ${i}/${tries}). Retrying..."
     sleep 5
-    i=$((i+1))
+    [ "${i}" -eq "${tries}" ] && echo "⚠️  Continue anyway."
   done
 fi
 
-# ── À partir d’ici, garde le reste de TON script (écriture MapCycle, Game.ini, lancement)
-
-
 # ─────────────────────────────────────────
-# (B) Génération MapCycle.txt
+# MapCycle.txt (seulement si fourni)
 # ─────────────────────────────────────────
-# SS_MAPCYCLE peut être une ou plusieurs lignes "Scenario_XXX"
-# Ex: 
-#   SS_MAPCYCLE="Scenario_Farmhouse_Checkpoint_Security
-#   Scenario_Summit_Checkpoint_Security"
 echo "🗺️  Writing MapCycle..."
-{
-  # Première ligne: "MapCycle=..."
-  echo "# Generated by entrypoint"
-  echo "# One scenario id per line is supported by Sandstorm dedicated"
-  echo "${SS_MAPCYCLE}" | tr '\r' '\n' | sed '/^\s*$/d'
-} > "${MAPCYCLE}"
+if [ -n "${SS_MAPCYCLE}" ]; then
+  {
+    # pas de commentaires ni lignes vides → certain parseurs sont chatouilleux
+    echo "${SS_MAPCYCLE}" | tr '\r' '\n' | sed '/^\s*$/d'
+  } > "${MAPCYCLE}"
+  echo "   → MapCycle.txt écrit ($(wc -l < "${MAPCYCLE}") lignes)"
+else
+  echo "   → Aucun SS_MAPCYCLE fourni, on saute l'écriture."
+fi
 
 # ─────────────────────────────────────────
-# (C) Génération Game.ini orienté CHECKPOINT
+# Game.ini (VERSUS)
 # ─────────────────────────────────────────
 echo "🧩 Writing Game.ini..."
+# Choix de la section en fonction du mode PvP
+MODE_UPPER="$(echo "${SS_GAME_MODE}" | tr '[:lower:]' '[:upper:]')"
+case "${MODE_UPPER}" in
+  PUSH)       MODE_SECTION="/Script/Insurgency.INSPushGameMode" ;;
+  FIREFIGHT)  MODE_SECTION="/Script/Insurgency.INSFirefightGameMode" ;;
+  SKIRMISH)   MODE_SECTION="/Script/Insurgency.INSSkirmishGameMode" ;;
+  DOMINATION) MODE_SECTION="/Script/Insurgency.INSDominationGameMode" ;;
+  *)          MODE_SECTION="/Script/Insurgency.INSPushGameMode" ; SS_GAME_MODE="Push" ;;
+esac
+
 cat > "${GAMEINI}" <<EOF
 ; ------------------------------------------------------------------
-; Insurgency Sandstorm - Game.ini (orienté COOP / CHECKPOINT)
-; NOTE: Lancer un scénario Checkpoint (ex: Scenario_Farmhouse_Checkpoint_Security)
-;       pour que ces paramètres s'appliquent.
+; Insurgency Sandstorm - Game.ini (VERSUS / PvP)
 ; ------------------------------------------------------------------
 
 [/Script/Insurgency.INSGameMode]
-; ===== QOL générique =====
 bKillFeed=${SS_KILL_FEED}
 bKillCamera=${SS_KILL_CAMERA}
 bVoiceEnabled=${SS_VOICE_ENABLED}
-
-; Friendly fire global (plutôt PVP ; en coop souvent ignoré selon le mode)
-; On force la désactivation explicite comme demandé :
-bAllowFriendlyFire=${SS_ALLOW_FF:-False}
-; Échelle de dégâts FF si jamais activé côté serveur / autre mode :
-FriendlyFireDamageScale=${SS_FRIENDLY_FIRE_SCALE:-0.0}
-
-; Timings et limites
-GameStartingIntermissionTime=${SS_INTERMISSION_TIME:-10}
-RoundLimit=${SS_ROUND_LIMIT:-1}
+FriendlyFireDamageScale=${SS_FRIENDLY_FIRE_SCALE}
 RoundTime=${SS_ROUND_TIME}
 PostRoundTime=${SS_POST_ROUND_TIME}
+bAllowVoting=${SS_VOTE_ENABLED}
+RequiredVotePercentage=${SS_VOTE_PERCENT}
 
-; ===== NE RIEN DÉFINIR ICI sur les bots pour CHECKPOINT =====
-; (NumBots, BotQuota, BotDifficulty laissés absents pour éviter les conflits)
-
-[/Script/Insurgency.INSCheckpointGameMode]
-; ===== ENNEMIS (COOP) =====
-; IMPORTANT: pas de NumBots/BotQuota/BotDifficulty ici.
-bBots=True
-MinimumEnemies=${SS_MIN_ENEMIES:-20}
-MaximumEnemies=${SS_MAX_ENEMIES:-20}
-SoloEnemies=${SS_SOLO_ENEMIES:-0}
-
-; Options utiles / stables en coop
-bBotsUseVehicleInsertion=${SS_BOTS_USE_VEHICLE:-True}
-RespawnDPR=${SS_RESPAWN_DPR:-0.5}
-DefendCaptureTime=${SS_DEFEND_CAPTURE_TIME:-45}
-
-; Supply (facultatif en coop ; mets-les si tu les utilises vraiment)
-; InitialSupply=${SS_INITIAL_SUPPLY}
-; MaxSupply=${SS_MAX_SUPPLY}
-
-[/Script/Insurgency.INSCoopMode]
-; ===== BOTS ALLIÉS & COMPORTEMENTS =====
-bKickIdleSpectators=${SS_KICK_IDLE_SPECTATORS:-True}
-FriendlyBotQuota=${SS_FRIENDLY_BOT_QUOTA:-0}   ; mets 6 si tu veux des alliés
-
-; ===== (Optionnel) Section avancée =====
-; ⚠️ Évite les mutators qui réduisent la pop (p.ex. Hardcore selon version)
-; Mutators=Hardcore,NoResupply
-; ObjectiveCaptureSpeedScale=1.0
-; TeamKillLimit=3
-; bDeadSayAll=true
+${MODE_SECTION}
+bBots=${SS_BOTS_ENABLED}
+NumBots=${SS_BOT_NUM}
+BotQuota=${SS_BOT_QUOTA}
+BotDifficulty=${SS_BOT_DIFFICULTY}
 EOF
-
-echo "✅ Game.ini écrit (oriented Checkpoint). Pense à redémarrer le serveur."
-
+echo "   → Game.ini écrit (${SS_GAME_MODE})"
 
 # ─────────────────────────────────────────
-# (D) Lancement serveur
+# Lancement serveur
 # ─────────────────────────────────────────
 cd "${GAMEDIR}/Insurgency/Binaries/Linux"
 
-# Construction de la ligne de lancement
 LAUNCH_MAP="${SS_MAP}?Scenario=${SS_SCENARIO}?MaxPlayers=${SS_MAXPLAYERS}"
+
+# Flags XP (optionnels) — uniquement si tokens fournis et RCON_PASSWORD vide
+XP_ARGS=()
+if [ -n "${GSLT_TOKEN}" ] && [ -n "${GAMESTATS_TOKEN}" ] && [ -z "${RCON_PASSWORD}" ]; then
+  XP_ARGS+=( "-GSLTToken=${GSLT_TOKEN}" "-GameStatsToken=${GAMESTATS_TOKEN}" )
+  echo "✨ XP flags activés (RCON password vide, tokens présents)."
+else
+  echo "ℹ️ XP non activé (tokens manquants ou RCON défini)."
+fi
 
 exec ./InsurgencyServer-Linux-Shipping \
   "${LAUNCH_MAP}" \
   -hostname="${SS_HOSTNAME}" \
   -Port="${PORT}" -QueryPort="${QUERYPORT}" -BeaconPort="${BEACONPORT}" \
-  -Rcon \
-  -RconPassword="${RCON_PASSWORD}" \
-  -log
+  -Rcon ${RCON_PASSWORD:+-RconPassword="${RCON_PASSWORD}"} \
+  -log \
+  "${XP_ARGS[@]}"
