@@ -15,22 +15,19 @@ echo "▶️ Starting Insurgency Sandstorm Dedicated Server..."
 echo "  PORT=$PORT | QUERYPORT=$QUERYPORT | BEACONPORT=$BEACONPORT"
 echo "  RCON_PASSWORD=${RCON_PASSWORD:+********} | AUTO_UPDATE=$AUTO_UPDATE"
 
-# Update via SteamCMD
 if [[ "$AUTO_UPDATE" == "1" ]]; then
   echo "📥 Updating server via SteamCMD..."
   if ! /home/steam/steamcmd/steamcmd.sh \
-      +@NoPromptForPassword 1 \
-      +force_install_dir /opt/sandstorm \
-      +login "$STEAM_USER" "$STEAM_PASS" \
-      +app_update 581330 validate \
-      +quit; then
+       +@NoPromptForPassword 1 \
+       +force_install_dir /opt/sandstorm \
+       +login "$STEAM_USER" "$STEAM_PASS" \
+       +app_update 581330 validate +quit; then
     echo "⚠️ steamcmd.sh non exécutable ? Tentative via bash..."
     bash /home/steam/steamcmd/steamcmd.sh \
-      +@NoPromptForPassword 1 \
-      +force_install_dir /opt/sandstorm \
-      +login "$STEAM_USER" "$STEAM_PASS" \
-      +app_update 581330 validate \
-      +quit
+       +@NoPromptForPassword 1 \
+       +force_install_dir /opt/sandstorm \
+       +login "$STEAM_USER" "$STEAM_PASS" \
+       +app_update 581330 validate +quit
   fi
 fi
 
