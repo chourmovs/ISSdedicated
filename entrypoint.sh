@@ -163,10 +163,10 @@ RequiredVotePercentage=${SS_VOTE_PERCENT}
 ; ====== Section avancée (optionnelle) ======
 ; Tu peux mettre ici des mutators & réglages additionnels.
 ; Exemple (ligne commentée) :
-; Mutators=Hardcore,NoResupply
-; ObjectiveCaptureSpeedScale=1.0
-; TeamKillLimit=3
-; bDeadSayAll=true
+Mutators=Hardcore,NoResupply
+ObjectiveCaptureSpeedScale=1.0
+TeamKillLimit=3
+bDeadSayAll=true
 
 EOF
 
