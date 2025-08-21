@@ -9,7 +9,7 @@ MAPCYCLE="${GAMEDIR}/Insurgency/Config/Server/MapCycle.txt"
 STEAMCMDDIR="${STEAMCMDDIR:-/home/steam/steamcmd}"
 APPID="${APPID:-581330}"
 
-# Valeurs par défaut (éditables via compose/Portainer)
+# Valeurs par défaut
 : "${AUTO_UPDATE:=1}"
 : "${PORT:=27102}"
 : "${QUERYPORT:=27131}"
@@ -18,37 +18,12 @@ APPID="${APPID:-581330}"
 : "${SS_HOSTNAME:=Chourmovs ISS}"
 : "${SS_MAXPLAYERS:=16}"
 
-# Map / mode par défaut
+# Map / mode
 : "${SS_MAP:=Farmhouse}"
 : "${SS_SCENARIO:=Scenario_Farmhouse_Checkpoint_Security}"
 : "${SS_GAME_MODE:=Checkpoint}"
 
-# BOTS (socle 100% reconnu)
-: "${SS_BOTS_ENABLED:=1}"         # 1/0
-: "${SS_BOT_NUM:=8}"              # nombre fixe bots (coop)
-: "${SS_BOT_QUOTA:=1.0}"          # ratio bots/joueur (coop) (souvent ignoré si NumBots fixé)
-: "${SS_BOT_DIFFICULTY:=0.6}"     # 0.0 – 1.0
-
-# Supply / réapparitions (coop Checkpoint)
-: "${SS_INITIAL_SUPPLY:=20}"
-: "${SS_MAX_SUPPLY:=30}"
-
-# Qualité de vie
-: "${SS_FRIENDLY_FIRE_SCALE:=0.2}"  # échelle dégâts alliés (pvp surtout, peut être ignoré en coop)
-: "${SS_KILL_FEED:=1}"              # 1/0
-: "${SS_KILL_CAMERA:=0}"            # 1/0 (souvent désactivé pour l’immersion)
-: "${SS_VOICE_ENABLED:=1}"          # 1/0
-
-# Durées / rythme (selon modes)
-: "${SS_ROUND_TIME:=900}"           # secondes (si applicable)
-: "${SS_POST_ROUND_TIME:=15}"       # secondes (si applicable)
-
-# Voting (si applicable sur serveurs publics)
-: "${SS_VOTE_ENABLED:=1}"
-: "${SS_VOTE_PERCENT:=0.6}"
-
-# MapCycle (chaîne multi-lignes possible)
-: "${SS_MAPCYCLE:=${SS_SCENARIO}}"
+# Bots etc. (tes variables déjà définies plus loin, inchangées)
 
 echo "▶️ Starting Insurgency Sandstorm Dedicated Server...
 
@@ -57,29 +32,70 @@ echo "▶️ Starting Insurgency Sandstorm Dedicated Server...
   MAP=${SS_MAP} | SCENARIO=${SS_SCENARIO} | MODE=${SS_GAME_MODE}
 "
 
-# Répertoires nécessaires
-mkdir -p "${CFGDIR}"
-mkdir -p "$(dirname "${MAPCYCLE}")"
-mkdir -p "${GAMEDIR}/Insurgency/Saved/SaveGames"
+# ── Création robuste des dossiers nécessaires (avec messages utiles)
+need_paths=(
+  "${GAMEDIR}"
+  "${GAMEDIR}/Insurgency"
+  "${GAMEDIR}/Insurgency/Saved"
+  "${GAMEDIR}/Insurgency/Saved/SaveGames"
+  "${GAMEDIR}/Insurgency/Config/Server"
+  "${CFGDIR}"
+)
 
-# ─────────────────────────────────────────
-# (A) Auto‑update SteamCMD (optionnel)
-# ─────────────────────────────────────────
+for p in "${need_paths[@]}"; do
+  if [ ! -d "$p" ]; then
+    if mkdir -p "$p" 2>/dev/null; then
+      :
+    else
+      echo "❌ Permission refusée pour créer: $p"
+      echo "   ➜ Vérifie que le volume est possédé par uid:gid 1000:1000."
+      echo "   ➜ Astuce: exécute le service 'fixperms' (voir stack) ou la commande one-shot chown."
+      sleep 3
+      exit 1
+    fi
+  fi
+done
+
+# Sécurité: refuser de continuer si on ne peut pas écrire
+echo "write-test" > "${GAMEDIR}/.writetest" 2>/dev/null || {
+  echo "❌ Impossible d'écrire dans ${GAMEDIR} (problème de permissions)."
+  echo "   ➜ Corrige les droits (chown -R 1000:1000) puis relance."
+  exit 1
+}
+rm -f "${GAMEDIR}/.writetest"
+
+# ── Auto-update SteamCMD (avec retries anti-0x602)
 if [ "${AUTO_UPDATE}" = "1" ]; then
   echo "📥 Updating server via SteamCMD..."
-  "${STEAMCMDDIR}/steamcmd.sh" +@sSteamCmdForcePlatformType linux \
-    +force_install_dir "${GAMEDIR}" \
-    +login anonymous \
-    +app_update "${APPID}" validate \
-    +quit || {
-      echo "⚠️ validate failed, retrying without validate..."
-      "${STEAMCMDDIR}/steamcmd.sh" +@sSteamCmdForcePlatformType linux \
+  tries=4
+  i=1
+  while [ $i -le $tries ]; do
+    if "${STEAMCMDDIR}/steamcmd.sh" +@sSteamCmdForcePlatformType linux \
+        +force_install_dir "${GAMEDIR}" \
+        +login anonymous \
+        +app_update "${APPID}" validate \
+        +quit; then
+      break
+    fi
+    echo "⚠️  SteamCMD validate failed (try $i/${tries}). Retrying without validate..."
+    if "${STEAMCMDDIR}/steamcmd.sh" +@sSteamCmdForcePlatformType linux \
         +force_install_dir "${GAMEDIR}" \
         +login anonymous \
         +app_update "${APPID}" \
-        +quit || echo "❌ SteamCMD update failed (continuing if server already present)"
-    }
+        +quit; then
+      break
+    fi
+    if [ $i -eq $tries ]; then
+      echo "❌ SteamCMD update failed after ${tries} tries — I will continue if the server files already exist."
+      break
+    fi
+    sleep 5
+    i=$((i+1))
+  done
 fi
+
+# ── À partir d’ici, garde le reste de TON script (écriture MapCycle, Game.ini, lancement)
+
 
 # ─────────────────────────────────────────
 # (B) Génération MapCycle.txt
