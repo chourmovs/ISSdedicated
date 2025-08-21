@@ -7,7 +7,7 @@ set -euo pipefail
 GAMEDIR="${GAMEDIR:-/opt/sandstorm}"
 CFGDIR="${GAMEDIR}/Insurgency/Saved/Config/LinuxServer"
 GAMEINI="${CFGDIR}/Game.ini"
-MAPCYCLE="${GAMEDIR}/Insurgency/Config/Server/MapCycle.txt"
+MAPCYCLE="${CFGDIR}/MapCycle.txt" 
 STEAMCMDDIR="${STEAMCMDDIR:-/home/steam/steamcmd}"
 APPID="${APPID:-581330}"
 
