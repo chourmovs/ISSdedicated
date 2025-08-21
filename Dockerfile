@@ -64,7 +64,7 @@ RUN chmod +x /entrypoint.sh
 # ──────────────────────────────
 # Ports
 # ──────────────────────────────
-EXPOSE 27102/udp 27131/udp 15000/udp
+EXPOSE 27102/udp 27131/udp 15000/udp 27015/tcp
 
 # ──────────────────────────────
 # Entrypoint
