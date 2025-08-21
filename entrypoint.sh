@@ -1,81 +1,89 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-STEAMCMDDIR="${STEAMCMDDIR:-/opt/steamcmd}"
-SANDSTORM_ROOT="${SANDSTORM_ROOT:-/opt/sandstorm}"
-APP_BIN="${SANDSTORM_ROOT}/Insurgency/Binaries/Linux/InsurgencyServer-Linux-Shipping"
-
-GAME_INI="${SANDSTORM_ROOT}/Insurgency/Saved/Config/LinuxServer/Game.ini"
-MAPCYCLE_TXT="${SANDSTORM_ROOT}/Insurgency/Config/Server/MapCycle.txt"
-
-# --- Secrets via Docker Swarm (si présents) : /run/secrets/<name> ---
-read_secret_file() {
-  local var="$1" file="$2"
-  if [[ -z "${!var:-}" && -f "$file" ]]; then
-    export "$var"="$(tr -d '\r' < "$file")"
+# ──────────────────────────────────────────────
+# Lecture secrets si montés par Swarm/K8s
+# ──────────────────────────────────────────────
+read_secret() {
+  local var="$1"
+  local file_var="${var}_FILE"
+  if [[ -n "${!file_var:-}" ]] && [[ -f "${!file_var}" ]]; then
+    export "$var"="$(< "${!file_var}")"
   fi
 }
-read_secret_file STEAM_USER /run/secrets/steam_user
-read_secret_file STEAM_PASS /run/secrets/steam_pass
-read_secret_file STEAM_2FA  /run/secrets/steam_2fa
 
-# --- Dépose config par défaut si volume vierge (si tu as copié des defaults/) ---
-if [[ ! -f "$GAME_INI" && -f "/defaults/Game.ini" ]]; then
-  cp -f /defaults/Game.ini "$GAME_INI"
-fi
-if [[ ! -f "$MAPCYCLE_TXT" && -f "/defaults/MapCycle.txt" ]]; then
-  cp -f /defaults/MapCycle.txt "$MAPCYCLE_TXT"
-fi
+for s in STEAM_USER STEAM_PASS STEAM_2FA RCON_PASSWORD; do
+  read_secret "$s"
+done
 
-# --- Patch dynamique selon env ---
-sed -i "s/^FriendlyBotQuota=.*/FriendlyBotQuota=${FRIENDLY_BOT_QUOTA:-6}/" "$GAME_INI" || true
-sed -i "s/^MinimumEnemies=.*/MinimumEnemies=${MIN_ENEMIES:-10}/" "$GAME_INI" || true
-sed -i "s/^MaximumEnemies=.*/MaximumEnemies=${MAX_ENEMIES:-24}/" "$GAME_INI" || true
+# ──────────────────────────────────────────────
+# Défauts variables
+# ──────────────────────────────────────────────
+STEAMCMDDIR="${STEAMCMDDIR:-/opt/steamcmd}"
+SANDSTORM_ROOT="${SANDSTORM_ROOT:-/opt/sandstorm}"
+STEAMAPPID="${STEAMAPPID:-581330}"
+AUTO_UPDATE="${AUTO_UPDATE:-1}"
+ONE_TRY_ONLY="${ONE_TRY_ONLY:-1}"
 
-# --- Construction des arguments de login SteamCMD ---
+# ──────────────────────────────────────────────
+# Prépare les arguments de login Steam
+# ──────────────────────────────────────────────
 LOGIN_ARGS=()
-if [[ -n "${STEAM_USER:-}" && -n "${STEAM_PASS:-}" ]]; then
-  # 2FA optionnel : +login user pass [code]
-  if [[ -n "${STEAM_2FA:-}" ]]; then
-    LOGIN_ARGS=(+login "${STEAM_USER}" "${STEAM_PASS}" "${STEAM_2FA}")
-  else
-    LOGIN_ARGS=(+login "${STEAM_USER}" "${STEAM_PASS}")
-  fi
+if [[ -n "${STEAM_USER:-}" ]] && [[ -n "${STEAM_PASS:-}" ]]; then
+  LOGIN_ARGS+=(+login "$STEAM_USER" "$STEAM_PASS")
+  [[ -n "${STEAM_2FA:-}" ]] && LOGIN_ARGS+=(+set_steam_guard_code "$STEAM_2FA")
 else
-  LOGIN_ARGS=(+login anonymous)
+  LOGIN_ARGS+=(+login anonymous)
 fi
 
-# --- Update/Install (à chaque start si AUTO_UPDATE=1) ---
-if [[ "${AUTO_UPDATE:-1}" == "1" ]]; then
-  # Force la plateforme Linux et coupe en cas d’échec
-  "${STEAMCMDDIR}/steamcmd.sh" +@sSteamCmdForcePlatformType linux +@ShutdownOnFailedCommand 1 +@NoPromptForPassword 1 \
-    "${LOGIN_ARGS[@]}" \
-    +force_install_dir "${SANDSTORM_ROOT}" \
-    +app_update "${STEAMAPPID:-581330}" validate \
+# ──────────────────────────────────────────────
+# SteamCMD install / update (1 seule tentative)
+# ──────────────────────────────────────────────
+if [[ "$AUTO_UPDATE" == "1" ]]; then
+  echo ">>> SteamCMD: tentative unique d’installation/mise à jour…"
+
+  STEAMCMD_CMD=(
+    "${STEAMCMDDIR}/steamcmd.sh"
+    +@sSteamCmdForcePlatformType linux
+    +@NoPromptForPassword 1
+    +@ShutdownOnFailedCommand 1
+    "${LOGIN_ARGS[@]}"
+    +force_install_dir "${SANDSTORM_ROOT}"
+    +app_update "$STEAMAPPID" validate
     +quit
+  )
+
+  set +e
+  tmp_log="$(mktemp)"
+  "${STEAMCMD_CMD[@]}" | tee "$tmp_log"
+  sc=$?
+  set -e
+
+  if [[ "$sc" -ne 0 ]]; then
+    echo "!!! SteamCMD a échoué (exit=$sc)"
+    if [[ "$ONE_TRY_ONLY" == "1" ]]; then
+      echo "!!! ONE_TRY_ONLY=1 → arrêt du conteneur pour éviter tout retry bloquant"
+      echo "    Dernières lignes SteamCMD :"
+      tail -n 30 "$tmp_log" || true
+      rm -f "$tmp_log"
+      exit 90
+    fi
+  fi
+  rm -f "$tmp_log"
 fi
 
-# --- Checks utiles (log informatif) ---
-du -sh "${SANDSTORM_ROOT}" || true
-ls -1 "${SANDSTORM_ROOT}/Insurgency/Content/Paks" 2>/dev/null | wc -l || true
+# ──────────────────────────────────────────────
+# Lancement du serveur Insurgency Sandstorm
+# ──────────────────────────────────────────────
+echo ">>> Lancement du serveur Insurgency Sandstorm…"
 
-# --- Lancement serveur ---
-cd "${SANDSTORM_ROOT}/Insurgency/Binaries/Linux"
-
-PORT_ARG="-Port=${SERVER_PORT:-27102}"
-QUERY_ARG="-QueryPort=${QUERY_PORT:-27131}"
-RCON_FLAGS="-Rcon -RconPassword=${RCON_PASSWORD:-changeme} -RconListenPort=${RCON_PORT:-27015}"
-MAPCYCLE_ARG="-MapCycle=MapCycle"
-MAXP_ARG="-MaxPlayers=${MAX_PLAYERS:-8}"
-
-SCENARIO_PATH="${SCENARIO:-Scenario_Oilfield_Checkpoint_Security}"
-MAPNAME="${MAP:-Oilfield}"
-
-echo ">>> Starting Insurgency: Sandstorm server"
-echo "    Map: ${MAPNAME} / Scenario: ${SCENARIO_PATH}"
-echo "    Ports: game=${SERVER_PORT} (udp), query=${QUERY_PORT} (udp), rcon=${RCON_PORT} (tcp)"
-
-exec "${APP_BIN}" \
-  "${MAPNAME}?Scenario=${SCENARIO_PATH}" \
-  ${MAPCYCLE_ARG} ${PORT_ARG} ${QUERY_ARG} ${MAXP_ARG} \
-  -log ${RCON_FLAGS}
+cd "${SANDSTORM_ROOT}"
+exec ./Insurgency/Binaries/Linux/InsurgencyServer-Linux-Shipping \
+  "Scenario=Scenario_Crossing_Checkpoint" \
+  -Port="${PORT:-27102}" \
+  -QueryPort="${QUERYPORT:-27131}" \
+  -log \
+  -hostname="${HOSTNAME:-Sandstorm Docker Server}" \
+  -Rcon \
+  -RconPassword="${RCON_PASSWORD:-ChangeMe!}" \
+  ${EXTRA_ARGS:-}
