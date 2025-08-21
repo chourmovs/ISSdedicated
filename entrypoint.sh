@@ -18,12 +18,20 @@ echo "  RCON_PASSWORD=${RCON_PASSWORD:+********} | AUTO_UPDATE=$AUTO_UPDATE"
 # Update via SteamCMD
 if [[ "$AUTO_UPDATE" == "1" ]]; then
   echo "📥 Updating server via SteamCMD..."
-  /home/steam/steamcmd/steamcmd.sh \
-    +@NoPromptForPassword 1 \
-    +force_install_dir /opt/sandstorm \
-    +login "$STEAM_USER" "$STEAM_PASS" \
-    +app_update 581330 validate \
-    +quit
+  if ! /home/steam/steamcmd/steamcmd.sh \
+      +@NoPromptForPassword 1 \
+      +force_install_dir /opt/sandstorm \
+      +login "$STEAM_USER" "$STEAM_PASS" \
+      +app_update 581330 validate \
+      +quit; then
+    echo "⚠️ steamcmd.sh non exécutable ? Tentative via bash..."
+    bash /home/steam/steamcmd/steamcmd.sh \
+      +@NoPromptForPassword 1 \
+      +force_install_dir /opt/sandstorm \
+      +login "$STEAM_USER" "$STEAM_PASS" \
+      +app_update 581330 validate \
+      +quit
+  fi
 fi
 
 # Minimal Game.ini config injection if missing
