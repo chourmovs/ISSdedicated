@@ -1,0 +1,28 @@
+version: "3.8"
+services:
+  sandstorm:
+    build: .
+    container_name: sandstorm
+    environment:
+      - AUTO_UPDATE=1
+      - SERVER_PORT=27102
+      - QUERY_PORT=27131
+      - RCON_PORT=27015
+      - MAX_PLAYERS=8
+      - RCON_PASSWORD=SuperSecret
+      - MAP=Oilfield
+      - SCENARIO=Scenario_Oilfield_Checkpoint_Security
+      - FRIENDLY_BOT_QUOTA=6
+      - MIN_ENEMIES=10
+      - MAX_ENEMIES=24
+    ports:
+      - "27102:27102/udp"
+      - "27131:27131/udp"
+      - "27015:27015/tcp"
+    volumes:
+      - sandstorm_saved:/opt/sandstorm/Insurgency/Saved
+      - sandstorm_cfg:/opt/sandstorm/Insurgency/Config
+    restart: unless-stopped
+volumes:
+  sandstorm_saved:
+  sandstorm_cfg:
