@@ -1,3 +1,0 @@
-Scenario_Farmhouse_Checkpoint_Security
-Scenario_Summit_Checkpoint_Security
-Scenario_Refinery_Checkpoint_Security
