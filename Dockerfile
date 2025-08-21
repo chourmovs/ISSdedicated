@@ -1,43 +1,48 @@
 FROM debian:bullseye-slim
 
-# Préparer environnement
-RUN apt-get update && apt-get install -y \
-    lib32gcc-s1 \
-    curl \
-    ca-certificates \
+LABEL maintainer="toi"
+
+# Variables globales
+ENV STEAMCMDDIR=/opt/steamcmd \
+    GAMEDIR=/opt/sandstorm \
+    PATH=$PATH:/opt/steamcmd
+
+# Préparer système
+RUN dpkg --add-architecture i386 \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+       ca-certificates locales curl wget unzip \
+       lib32gcc-s1 lib32stdc++6 \
     && rm -rf /var/lib/apt/lists/*
 
-# Créer user non-root
+# Locales
+RUN sed -i 's/# *en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen \
+    && locale-gen
+ENV LANG=en_US.UTF-8 \
+    LANGUAGE=en_US:en \
+    LC_ALL=en_US.UTF-8
+
+# Créer utilisateur steam
 RUN useradd -m steam
 
-# Installer steamcmd
-RUN mkdir -p /home/steam/steamcmd && \
-    cd /home/steam/steamcmd && \
-    curl -sSL https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
-    | tar -xz && \
-    chown -R steam:steam /home/steam
+# Installer SteamCMD
+RUN mkdir -p ${STEAMCMDDIR} \
+    && chown -R steam:steam ${STEAMCMDDIR} \
+    && su steam -c "curl -sSL https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+       | tar -xz -C ${STEAMCMDDIR}"
 
-# Variables par défaut
-ENV GAMEDIR=/opt/sandstorm \
-    STEAMCMDDIR=/home/steam/steamcmd \
-    APPID=581330
-
-# Créer dossier jeu en root puis donner à steam
-RUN mkdir -p ${GAMEDIR} && chown -R steam:steam ${GAMEDIR}
+# Créer arborescence du serveur (avec droits steam)
+RUN mkdir -p ${GAMEDIR}/Insurgency/Saved/Config/LinuxServer \
+    ${GAMEDIR}/Insurgency/Config/Server \
+    && chown -R steam:steam ${GAMEDIR}
 
 # Copier entrypoint
-COPY --chown=steam:steam entrypoint.sh /home/steam/entrypoint.sh
-RUN chmod +x /home/steam/entrypoint.sh
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
-# Passer en user steam (à la fin seulement)
+EXPOSE 27102/udp 27131/udp 27102/tcp 15000/udp
+
+WORKDIR ${GAMEDIR}
 USER steam
-WORKDIR /home/steam
 
-# Exposer ports
-EXPOSE 27102/udp 27131/udp 15000/udp 27015/tcp
-
-# Volumes (configs persistants)
-VOLUME ["${GAMEDIR}"]
-
-# Entrypoint
-ENTRYPOINT ["/home/steam/entrypoint.sh"]
+ENTRYPOINT ["/entrypoint.sh"]
