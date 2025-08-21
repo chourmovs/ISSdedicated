@@ -2,7 +2,7 @@ version: "3.9"
 
 services:
   sandstorm:
-    image: chourmovs/ins-sandstorm:latest
+    image: chourmovs/issdedicated:main
     container_name: sandstorm
     restart: unless-stopped
 
