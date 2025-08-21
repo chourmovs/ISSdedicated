@@ -1,37 +1,26 @@
 services:
   sandstorm:
-    image: docker.io/chourmovs/issdedicated:main
+    build: .
     container_name: sandstorm
     environment:
-      # ——— Steam / updates ———
-      AUTO_UPDATE: "0"        # 0 = aucune tentative Steam au démarrage (évite les rate‑limits)
-      ONE_TRY_ONLY: "1"       # si tu remets AUTO_UPDATE=1, 1 seule tentative (pas de retry)
-      # STEAM_USER: ""        # ← si tu veux (re)faire une MAJ complète: mets user/pass qui possèdent le jeu
-      # STEAM_PASS: ""        #    + (optionnel) STEAM_2FA pour le 1er login
-      # STEAM_2FA: ""         #    pense à monter le volume /home/steam/Steam pour mémoriser le token
-
-      # ——— Réseau / RCON ———
-      PORT: "27102"           # port jeu (UDP)
-      QUERYPORT: "27131"      # port query (UDP)
-      RCON_PASSWORD: "ChangeMe!"  # ⚠️ choisis un mot de passe fort
-
-      # ——— Extras ———
-      # EXTRA_ARGS: ""        # ex: -hostname="Mon Serveur"  (ajouté tel quel à la ligne de commande)
-
+      STEAM_USER: "anonymous"   # ou "anonymous"
+      STEAM_PASS: ""  # vide si anonymous
+      AUTO_UPDATE: "1"
+      PORT: "27102"
+      QUERYPORT: "27132"
+      RCON_PASSWORD: "MonSuperMotDePasse!"
+      EXTRA_ARGS: '-MaxPlayers=16'
     ports:
-      - "27102:27102/udp"     # jeu
-      - "27131:27131/udp"     # query
-      - "27015:27015/tcp"     # RCON
+      - "27102:27102/udp"
+      - "27103:27103/udp"
+      - "27132:27132/udp"
+      - "15000:15000/udp"
+      - "27015:27015/tcp"
     volumes:
-      - steam_auth:/home/steam/Steam                          # token Steam Guard (persistant)
-      - sandstorm_saved:/opt/sandstorm/Insurgency/Saved       # sauvegardes
-      - sandstorm_cfg:/opt/sandstorm/Insurgency/Config        # configs (Game.ini, MapCycle.txt)
+      - steam_auth:/home/steam/Steam
+      - sandstorm_saved:/opt/sandstorm/Insurgency/Saved
+      - sandstorm_cfg:/opt/sandstorm/Insurgency/Saved/Config/LinuxServer
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "bash", "-c", "pgrep -f InsurgencyServer-Linux-Shipping >/dev/null"]
-      interval: 30s
-      timeout: 5s
-      retries: 5
 
 volumes:
   steam_auth:
