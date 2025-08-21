@@ -17,20 +17,21 @@ RUN mkdir -p /home/steam/steamcmd && \
     | tar -xz && \
     chown -R steam:steam /home/steam
 
-USER steam
-WORKDIR /home/steam
-
 # Variables par défaut
 ENV GAMEDIR=/opt/sandstorm \
     STEAMCMDDIR=/home/steam/steamcmd \
     APPID=581330
 
+# Créer dossier jeu en root puis donner à steam
+RUN mkdir -p ${GAMEDIR} && chown -R steam:steam ${GAMEDIR}
+
 # Copier entrypoint
 COPY --chown=steam:steam entrypoint.sh /home/steam/entrypoint.sh
 RUN chmod +x /home/steam/entrypoint.sh
 
-# Créer dossier jeu
-RUN mkdir -p ${GAMEDIR}
+# Passer en user steam (à la fin seulement)
+USER steam
+WORKDIR /home/steam
 
 # Exposer ports
 EXPOSE 27102/udp 27131/udp 15000/udp 27015/tcp
