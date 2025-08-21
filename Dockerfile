@@ -1,48 +1,72 @@
+# ──────────────────────────────
+# Dockerfile Insurgency Sandstorm
+# ──────────────────────────────
 FROM debian:bullseye-slim
 
-LABEL maintainer="toi"
+# Variables Steam
+ENV DEBIAN_FRONTEND=noninteractive \
+    LANG=en_US.UTF-8 \
+    LC_ALL=en_US.UTF-8 \
+    APPID=581330 \
+    STEAMCMDDIR=/home/steam/steamcmd \
+    GAMEDIR=/opt/sandstorm
 
-# Variables globales
-ENV STEAMCMDDIR=/opt/steamcmd \
-    GAMEDIR=/opt/sandstorm \
-    PATH=$PATH:/opt/steamcmd
-
-# Préparer système
-RUN dpkg --add-architecture i386 \
-    && apt-get update \
-    && apt-get install -y --no-install-recommends \
-       ca-certificates locales curl wget unzip \
-       lib32gcc-s1 lib32stdc++6 \
+# ──────────────────────────────
+# Dépendances système
+# ──────────────────────────────
+RUN apt-get update && apt-get install -y \
+    locales \
+    lib32gcc-s1 \
+    lib32stdc++6 \
+    libtinfo6 \
+    libcurl4 \
+    libcurl3-gnutls \
+    curl \
+    wget \
+    tar \
+    ca-certificates \
+    tini \
     && rm -rf /var/lib/apt/lists/*
 
-# Locales
-RUN sed -i 's/# *en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen \
+# Générer locales UTF-8
+RUN sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen \
     && locale-gen
-ENV LANG=en_US.UTF-8 \
-    LANGUAGE=en_US:en \
-    LC_ALL=en_US.UTF-8
 
-# Créer utilisateur steam
-RUN useradd -m steam
+# ──────────────────────────────
+# Utilisateur non-root
+# ──────────────────────────────
+RUN useradd -m steam && mkdir -p ${GAMEDIR} && chown -R steam:steam ${GAMEDIR}
 
+USER steam
+WORKDIR /home/steam
+
+# ──────────────────────────────
 # Installer SteamCMD
-RUN mkdir -p ${STEAMCMDDIR} \
-    && chown -R steam:steam ${STEAMCMDDIR} \
-    && su steam -c "curl -sSL https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
-       | tar -xz -C ${STEAMCMDDIR}"
+# ──────────────────────────────
+RUN mkdir -p ${STEAMCMDDIR} && cd ${STEAMCMDDIR} \
+    && wget https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+    && tar -xvzf steamcmd_linux.tar.gz \
+    && rm steamcmd_linux.tar.gz \
+    && chmod +x ${STEAMCMDDIR}/steamcmd.sh \
+    && chmod +x ${STEAMCMDDIR}/linux32/steamcmd
 
-# Créer arborescence du serveur (avec droits steam)
-RUN mkdir -p ${GAMEDIR}/Insurgency/Saved/Config/LinuxServer \
-    ${GAMEDIR}/Insurgency/Config/Server \
-    && chown -R steam:steam ${GAMEDIR}
+# ──────────────────────────────
+# Volumes persistants
+# ──────────────────────────────
+VOLUME ["${GAMEDIR}", "/home/steam/Steam"]
 
-# Copier entrypoint
-COPY entrypoint.sh /entrypoint.sh
+# ──────────────────────────────
+# Copier l’entrypoint
+# ──────────────────────────────
+COPY --chown=steam:steam entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-EXPOSE 27102/udp 27131/udp 27102/tcp 15000/udp
+# ──────────────────────────────
+# Ports
+# ──────────────────────────────
+EXPOSE 27102/udp 27131/udp 15000/udp
 
-WORKDIR ${GAMEDIR}
-USER steam
-
-ENTRYPOINT ["/entrypoint.sh"]
+# ──────────────────────────────
+# Entrypoint
+# ──────────────────────────────
+ENTRYPOINT ["/usr/bin/tini", "--", "/entrypoint.sh"]
