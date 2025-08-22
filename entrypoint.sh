@@ -166,28 +166,53 @@ echo "   → Game.ini écrit (${SS_GAME_MODE})"
 # ─────────────────────────────────────────
 # Déduction de l'asset à partir du SCENARIO (anti-range)
 # ─────────────────────────────────────────
+# --- Déduire MODE + ASSET depuis SS_SCENARIO
 scenario_core="$(printf '%s' "${SS_SCENARIO#Scenario_}" | cut -d'_' -f1)"
+scenario_mode="$(printf '%s' "${SS_SCENARIO}" | awk -F'_' '{print $(NF-1)}' | tr '[:lower:]' '[:upper:]')"
+
 case "${scenario_core}" in
-  Crossing)   MAP_ASSET="Canyon"   ;;  # nom interne Crossing
-  Hideout)    MAP_ASSET="Town"     ;;  # Hideout
-  Hillside)   MAP_ASSET="Sinjar"   ;;  # Hillside
-  Refinery)   MAP_ASSET="Oilfield" ;;  # Refinery
-  *)          MAP_ASSET="${scenario_core}" ;;  # Farmhouse, Summit, Precinct, Tell, PowerPlant, Outskirts, Ministry, Bab/Citadel...
+  Crossing)   MAP_ASSET="Canyon"   ;;
+  Hideout)    MAP_ASSET="Town"     ;;
+  Hillside)   MAP_ASSET="Sinjar"   ;;
+  Refinery)   MAP_ASSET="Oilfield" ;;
+  *)          MAP_ASSET="${scenario_core}" ;;
 esac
-echo "🧭  Scenario=${SS_SCENARIO}  →  Asset=${MAP_ASSET}"
 
-# ─────────────────────────────────────────
-# Lancement serveur (asset + scénario + bots forcés)
-# ─────────────────────────────────────────
+case "${scenario_mode}" in
+  PUSH)       MODE_SECTION="/Script/Insurgency.INSPushGameMode" ;;
+  FIREFIGHT)  MODE_SECTION="/Script/Insurgency.INSFirefightGameMode" ;;
+  SKIRMISH)   MODE_SECTION="/Script/Insurgency.INSSkirmishGameMode" ;;
+  DOMINATION) MODE_SECTION="/Script/Insurgency.INSDominationGameMode" ;;
+  *)          MODE_SECTION="/Script/Insurgency.INSPushGameMode" ; scenario_mode="PUSH" ;;
+esac
+echo "🧭 Scenario=${SS_SCENARIO} → Asset=${MAP_ASSET} | MODE=${scenario_mode}"
+
+# --- Réécrire le Game.ini avec la bonne section (selon scenario_mode)
+cat > "${GAMEINI}" <<EOF
+[/Script/Insurgency.INSGameMode]
+bKillFeed=${SS_KILL_FEED}
+bKillCamera=${SS_KILL_CAMERA}
+bVoiceEnabled=${SS_VOICE_ENABLED}
+FriendlyFireDamageScale=${SS_FRIENDLY_FIRE_SCALE}
+RoundTime=${SS_ROUND_TIME}
+PostRoundTime=${SS_POST_ROUND_TIME}
+bAllowVoting=${SS_VOTE_ENABLED}
+RequiredVotePercentage=${SS_VOTE_PERCENT}
+
+${MODE_SECTION}
+bBots=${SS_BOTS_ENABLED}
+NumBots=${SS_BOT_NUM}
+BotQuota=${SS_BOT_QUOTA}
+BotDifficulty=${SS_BOT_DIFFICULTY}
+EOF
+echo "   → Game.ini écrit (${scenario_mode})"
+
+# --- Lancement (asset + scénario + bots forcés dans l’URL)
 cd "${GAMEDIR}/Insurgency/Binaries/Linux"
-
-# Bots forcés dans l’URL (certains serveurs ignorent l’INI sinon)
 LAUNCH_URL="${MAP_ASSET}?Scenario=${SS_SCENARIO}?MaxPlayers=${SS_MAXPLAYERS}\
 ?bBots=${SS_BOTS_ENABLED}?NumBots=${SS_BOT_NUM}?BotQuota=${SS_BOT_QUOTA}?BotDifficulty=${SS_BOT_DIFFICULTY}"
-
 echo "▶️  Launch: ${LAUNCH_URL}"
 
-# Flags XP (optionnels) — uniquement si tokens fournis et RCON_PASSWORD vide
 XP_ARGS=()
 if [ -n "${GSLT_TOKEN}" ] && [ -n "${GAMESTATS_TOKEN}" ] && [ -z "${RCON_PASSWORD}" ]; then
   XP_ARGS+=( "-GSLTToken=${GSLT_TOKEN}" "-GameStatsToken=${GAMESTATS_TOKEN}" )
@@ -203,5 +228,3 @@ exec ./InsurgencyServer-Linux-Shipping \
   -Rcon ${RCON_PASSWORD:+-RconPassword="${RCON_PASSWORD}"} \
   -log \
   "${XP_ARGS[@]}"
-
-
