@@ -168,10 +168,10 @@ echo "   → Game.ini écrit (${SS_GAME_MODE})"
 # ─────────────────────────────────────────
 scenario_core="$(printf '%s' "${SS_SCENARIO#Scenario_}" | cut -d'_' -f1)"
 case "${scenario_core}" in
-  Crossing)   MAP_ASSET="Canyon"   ;;  # nom interne
-  Hideout)    MAP_ASSET="Town"     ;;
-  Hillside)   MAP_ASSET="Sinjar"   ;;
-  Refinery)   MAP_ASSET="Oilfield" ;;
+  Crossing)   MAP_ASSET="Canyon"   ;;  # nom interne Crossing
+  Hideout)    MAP_ASSET="Town"     ;;  # Hideout
+  Hillside)   MAP_ASSET="Sinjar"   ;;  # Hillside
+  Refinery)   MAP_ASSET="Oilfield" ;;  # Refinery
   *)          MAP_ASSET="${scenario_core}" ;;  # Farmhouse, Summit, Precinct, Tell, PowerPlant, Outskirts, Ministry, Bab/Citadel...
 esac
 echo "🧭  Scenario=${SS_SCENARIO}  →  Asset=${MAP_ASSET}"
@@ -181,19 +181,27 @@ echo "🧭  Scenario=${SS_SCENARIO}  →  Asset=${MAP_ASSET}"
 # ─────────────────────────────────────────
 cd "${GAMEDIR}/Insurgency/Binaries/Linux"
 
-# Déduire l'asset depuis SS_SCENARIO (tu as déjà ce bloc plus haut)
-scenario_core="$(printf '%s' "${SS_SCENARIO#Scenario_}" | cut -d'_' -f1)"
-case "${scenario_core}" in
-  Crossing)   MAP_ASSET="Canyon"   ;;
-  Hideout)    MAP_ASSET="Town"     ;;
-  Hillside)   MAP_ASSET="Sinjar"   ;;
-  Refinery)   MAP_ASSET="Oilfield" ;;
-  *)          MAP_ASSET="${scenario_core}" ;;
-esac
-
-# ⚠️ Bots forcés dans l’URL (certains serveurs ignorent l’INI sinon)
+# Bots forcés dans l’URL (certains serveurs ignorent l’INI sinon)
 LAUNCH_URL="${MAP_ASSET}?Scenario=${SS_SCENARIO}?MaxPlayers=${SS_MAXPLAYERS}\
 ?bBots=${SS_BOTS_ENABLED}?NumBots=${SS_BOT_NUM}?BotQuota=${SS_BOT_QUOTA}?BotDifficulty=${SS_BOT_DIFFICULTY}"
 
 echo "▶️  Launch: ${LAUNCH_URL}"
+
+# Flags XP (optionnels) — uniquement si tokens fournis et RCON_PASSWORD vide
+XP_ARGS=()
+if [ -n "${GSLT_TOKEN}" ] && [ -n "${GAMESTATS_TOKEN}" ] && [ -z "${RCON_PASSWORD}" ]; then
+  XP_ARGS+=( "-GSLTToken=${GSLT_TOKEN}" "-GameStatsToken=${GAMESTATS_TOKEN}" )
+  echo "✨ XP flags activés (RCON password vide, tokens présents)."
+else
+  echo "ℹ️ XP non activé (tokens manquants ou RCON défini)."
+fi
+
+exec ./InsurgencyServer-Linux-Shipping \
+  "${LAUNCH_URL}" \
+  -hostname="${SS_HOSTNAME}" \
+  -Port="${PORT}" -QueryPort="${QUERYPORT}" -BeaconPort="${BEACONPORT}" \
+  -Rcon ${RCON_PASSWORD:+-RconPassword="${RCON_PASSWORD}"} \
+  -log \
+  "${XP_ARGS[@]}"
+
 
