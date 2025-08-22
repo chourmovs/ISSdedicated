@@ -45,6 +45,13 @@ fi
 : "${SS_BOT_DIFFICULTY:=0.7}"
 
 # ─────────────────────────────────────────
+# Auto-balance (déséquilibre alliés vs ennemis)
+# ─────────────────────────────────────────
+: "${SS_AUTO_BALANCE:=False}"     # True | False (placeholder pour Portainer)
+: "${SS_AUTO_BALANCE_DELAY:=10}"  # délai en secondes
+
+
+# ─────────────────────────────────────────
 # QOL / Timings / Vote
 # ─────────────────────────────────────────
 : "${SS_KILL_FEED:=1}"
@@ -206,6 +213,17 @@ BotQuota=${SS_BOT_QUOTA}
 BotDifficulty=${SS_BOT_DIFFICULTY}
 EOF
 echo "   → Game.ini écrit (${scenario_mode})"
+
+# ─────────────────────────────────────────
+# MultiplayerMode (désactivation auto-balance si demandé)
+# ─────────────────────────────────────────
+cat >> "${GAMEINI}" <<EOF
+
+[/Script/Insurgency.INSMultiplayerMode]
+bAutoBalanceTeams=${SS_AUTO_BALANCE}
+AutoBalanceDelay=${SS_AUTO_BALANCE_DELAY}
+EOF
+echo "   → Section INSMultiplayerMode écrite (bAutoBalanceTeams=${SS_AUTO_BALANCE})"
 
 # --- Lancement (asset + scénario + bots forcés dans l’URL)
 cd "${GAMEDIR}/Insurgency/Binaries/Linux"
