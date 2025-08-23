@@ -185,12 +185,18 @@ fi
 # ─────────────────────────────────────────
 MODE_UPPER="$(echo "${SS_GAME_MODE}" | tr '[:lower:]' '[:upper:]')"
 case "${MODE_UPPER}" in
-  PUSH)       MODE_SECTION="/Script/Insurgency.INSPushGameMode" ;;
-  FIREFIGHT)  MODE_SECTION="/Script/Insurgency.INSFirefightGameMode" ;;
-  SKIRMISH)   MODE_SECTION="/Script/Insurgency.INSSkirmishGameMode" ;;
-  DOMINATION) MODE_SECTION="/Script/Insurgency.INSDominationGameMode" ;;
-  *)          MODE_SECTION="/Script/Insurgency.INSPushGameMode" ; SS_GAME_MODE="Push" ;;
+  # PvP
+  PUSH)        MODE_SECTION="/Script/Insurgency.INSPushGameMode" ;;
+  FIREFIGHT)   MODE_SECTION="/Script/Insurgency.INSFirefightGameMode" ;;
+  SKIRMISH)    MODE_SECTION="/Script/Insurgency.INSSkirmishGameMode" ;;
+  DOMINATION)  MODE_SECTION="/Script/Insurgency.INSDominationGameMode" ;;
+  # COOP
+  CHECKPOINT)  MODE_SECTION="/Script/Insurgency.INSCheckpointGameMode" ;;
+  OUTPOST)     MODE_SECTION="/Script/Insurgency.INSOutpostGameMode" ;;
+  SURVIVAL)    MODE_SECTION="/Script/Insurgency.INSSurvivalGameMode" ;;
+  *)           MODE_SECTION="/Script/Insurgency.INSPushGameMode" ; SS_GAME_MODE="Push" ;;
 esac
+
 echo "🎮 Mode deduced → ${SS_GAME_MODE} (${MODE_SECTION})"
 
 
@@ -395,13 +401,18 @@ case "${scenario_core}" in
   Refinery)   MAP_ASSET="Oilfield" ;;
   *)          MAP_ASSET="${scenario_core}" ;;
 esac
+# Juste après avoir calculé scenario_core et scenario_mode :
 case "${scenario_mode}" in
-  PUSH)       MODE_SECTION="/Script/Insurgency.INSPushGameMode" ;;
-  FIREFIGHT)  MODE_SECTION="/Script/Insurgency.INSFirefightGameMode" ;;
-  SKIRMISH)   MODE_SECTION="/Script/Insurgency.INSSkirmishGameMode" ;;
-  DOMINATION) MODE_SECTION="/Script/Insurgency.INSDominationGameMode" ;;
-  *)          MODE_SECTION="/Script/Insurgency.INSPushGameMode" ; scenario_mode="PUSH" ;;
+  PUSH)        MODE_SECTION="/Script/Insurgency.INSPushGameMode" ;;
+  FIREFIGHT)   MODE_SECTION="/Script/Insurgency.INSFirefightGameMode" ;;
+  SKIRMISH)    MODE_SECTION="/Script/Insurgency.INSSkirmishGameMode" ;;
+  DOMINATION)  MODE_SECTION="/Script/Insurgency.INSDominationGameMode" ;;
+  CHECKPOINT)  MODE_SECTION="/Script/Insurgency.INSCheckpointGameMode" ;;
+  OUTPOST)     MODE_SECTION="/Script/Insurgency.INSOutpostGameMode" ;;
+  SURVIVAL)    MODE_SECTION="/Script/Insurgency.INSSurvivalGameMode" ;;
+  *)           MODE_SECTION="/Script/Insurgency.INSPushGameMode" ; scenario_mode="PUSH" ;;
 esac
+
 echo "🧭 Scenario='${SS_SCENARIO}' → Asset='${MAP_ASSET}' | MODE='${scenario_mode}'"
 
 # Re-écriture alignée au scenario_mode (reproduit ton flux “long”)
