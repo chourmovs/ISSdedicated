@@ -1,75 +1,69 @@
-version: "3.9"
+version: "3.8"
 
 services:
   sandstorm:
-    image: chourmovs/issdedicated:main
+    image: chourmovs/issdedicated:main          # ← remplace par ton image
     container_name: sandstorm
     restart: unless-stopped
+    stop_grace_period: 30s
 
-    # >>> Ports (expose ce dont tu as besoin)
     ports:
-      - "27102:27102/udp"  # Game
-      - "27131:27131/udp"  # Query
-      - "15000:15000/udp"  # Beacon
-      - "27015:27015/tcp"  # RCON (si tu utilises un client TCP)
+      - "27102:27102/udp"   # Game
+      - "27131:27131/udp"   # Query
+      - "15000:15000/udp"   # Beacon
+      - "27015:27015/tcp"   # RCON (optionnel)
 
-    # >>> Volumes persistants (bind mounts conseillés)
-    volumes:
-      - /opt/sandstorm:/opt/sandstorm
-      - /opt/steam:/home/steam/Steam
-
-    # >>> User 1000:1000 (steam)
-    user: "1000:1000"
-
-    # >>> Variables “max options”
     environment:
-      # --- Mises à jour / Réseau ---
-      AUTO_UPDATE: "1"
+      # Identité / Réseau
+      SS_HOSTNAME: "Chourmovs ISS (PvP)"
       PORT: "27102"
       QUERYPORT: "27131"
       BEACONPORT: "15000"
-      RCON_PASSWORD: "ChangeMe!"
 
-      # --- Identité / Slots ---
-      SS_HOSTNAME: "Chourmovs ISS"
-      SS_MAXPLAYERS: "16"
+      # Map/Mode/Scénario
+      SS_GAME_MODE: "Push"
+      SS_SCENARIO: "Scenario_Farmhouse_Push_Security"
+      SS_MAXPLAYERS: "28"
 
-      # --- Carte / Scénario / Mode ---
-      SS_MAP: "Farmhouse"
-      SS_SCENARIO: "Scenario_Farmhouse_Checkpoint_Security"
-      SS_GAME_MODE: "Checkpoint"
+      # Bots (versus)
+      SS_BOTS_ENABLED: "1"
+      SS_BOT_NUM: "10"
+      SS_BOT_QUOTA: "1.5"
+      SS_BOT_DIFFICULTY: "0.7"
 
-      # --- BOTS ---
-      SS_BOTS_ENABLED: "1"       # 1/0
-      SS_BOT_NUM: "10"           # nombre fixe
-      SS_BOT_QUOTA: "1.0"        # ratio bots/joueur (si applicable)
-      SS_BOT_DIFFICULTY: "0.7"   # 0.0 – 1.0
+      # Auto-balance
+      SS_AUTO_BALANCE: "False"
+      SS_AUTO_BALANCE_DELAY: "10"
 
-      # --- Supply / Rythme ---
-      SS_INITIAL_SUPPLY: "20"
-      SS_MAX_SUPPLY: "30"
-
-      # --- Qualité de vie ---
-      SS_FRIENDLY_FIRE_SCALE: "0.2"
+      # QOL
       SS_KILL_FEED: "1"
       SS_KILL_CAMERA: "0"
       SS_VOICE_ENABLED: "1"
-
-      # --- Durées ---
+      SS_FRIENDLY_FIRE_SCALE: "0.2"
       SS_ROUND_TIME: "900"
       SS_POST_ROUND_TIME: "15"
-
-      # --- Vote ---
       SS_VOTE_ENABLED: "1"
       SS_VOTE_PERCENT: "0.6"
 
-      # --- MapCycle multi-lignes (facultatif) ---
-      # Chaque ligne = un scenario ID valide
-      SS_MAPCYCLE: |
-        Scenario_Farmhouse_Checkpoint_Security
-        Scenario_Summit_Checkpoint_Security
-        Scenario_Refinery_Checkpoint_Security
+      # ✨ XP & Stats
+      SS_ENABLE_STATS: "1"              # écrit bDisableStats=False dans Game.ini
+      GSLT_TOKEN: "${GSLT_TOKEN}"       # définis ces 2 variables dans Portainer (Env/Secrets)
+      GAMESTATS_TOKEN: "${GAMESTATS_TOKEN}"
+      RCON_PASSWORD: ""                 # ⚠️ doit être VIDE pour l’XP officiel
 
-    stop_grace_period: 30s
-    stdin_open: true
-    tty: true
+      # 🧩 MODS & MUTATORS
+      SS_MODS: "1141916"                # AiModifier (mod.io)
+      SS_MUTATORS: "AiModifier"         # nom du mutator
+      SS_MUTATOR_URL_ARGS: "AIModifier.MaxCount=30?AIModifier.Accuracy=0.8"
+      EXTRA_SERVER_ARGS: ""             # args bruts optionnels
+
+      # Maintenance
+      AUTO_UPDATE: "1"
+
+    volumes:
+      - sandstorm_data:/opt/sandstorm        # binaires + configs + mods
+      - steam_cache:/home/steam/Steam        # cache SteamCMD
+
+volumes:
+  sandstorm_data:
+  steam_cache:
