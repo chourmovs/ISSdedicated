@@ -74,20 +74,125 @@ services:
 
       # ───────── AiModifier (placeholders) ─────────
       # Difficulté & skill
-      AIMOD_DIFFICULTY: "0.7"              # 0.0–1.0
-      AIMOD_ACCURACY: "0.8"                # 0.0–1.0
-      AIMOD_REACTION: "0.5"                # 0.0–1.0 (ReactionTime)
+            # ───────── AiModifier (ENRAGED defaults) ─────────
+      # Skill de base
+      AIMOD_DIFFICULTY: "0.9"          # 0–1
+      AIMOD_ACCURACY: "1.0"            # 0–1 (tirs précis)
+      AIMOD_REACTION: "0.10"           # 0–1 (réaction très rapide)
 
-      # Population & respawn
-      AIMOD_MAXCOUNT: "30"                 # nombre max de bots
-      AIMOD_RESPAWN_MIN: "5"               # sec
-      AIMOD_RESPAWN_MAX: "15"              # sec
-      AIMOD_SPAWN_DELAY: "2"               # sec
+      # Sight / vision
+      AIMOD_SIGHT_ALERT: "25000.0"
+      AIMOD_SIGHT_IDLE: "20000.0"
+      AIMOD_SIGHT_SMOKE: "600.0"
+      AIMOD_SIGHT_SMOKE_EYE: "300.0"
+      AIMOD_SIGHT_SMOKE_EYE_FRAC: "0.6"
+      AIMOD_MIN_LI_SEE: "0.010"                 # MinLightIntensityToSeeTarget
+      AIMOD_MIN_LI_NIGHT: "0.010"               # MinLightIntensitytoSeeTargetatNight
+      AIMOD_LI_FULLY_VISIBLE: "0.15"            # LightIntensityforFullyVisibleTarget
+      AIMOD_TIME_NOTICE_VISIB_MULT: "1.2"       # TimetoNoticeVisibilityMultiplier
+      AIMOD_MIN_LI_AFFECT_NV: "40.0"            # MinLightIntensitytoAffectNightVision
+      AIMOD_MIN_NV_STRENGTH: "0.20"             # MinNightVisionSightStrength
 
-      # Comportement : pas de couteau & rester groupés
-      AIMOD_ALLOW_MELEE: "0"               # 0 = pas de melee
-      AIMOD_STAY_IN_SQUADS: "1"            # 1 = rester en squads
-      AIMOD_SQUAD_SIZE: "6"                # taille d’un squad
+      # Chances d’être spotté (on rend le joueur + visible)
+      AIMOD_CH_SPRINT_MULT: "3.0"               # ChanceSprintMultiplier
+      AIMOD_CH_MOVING_MULT: "2.0"               # ChanceMovingMultiplier
+      AIMOD_CH_STAND_DIST: "70.0"               # ChanceAtDistanceStanding
+      AIMOD_CH_STAND_CLOSE: "98.0"              # ChanceAtCloseRangeStanding
+      AIMOD_CH_CROUCH_DIST: "6.0"               # ChanceAtDistanceCrouched
+      AIMOD_CH_CROUCH_CLOSE: "50.0"             # ChanceAtCloseRangeCrouched
+      AIMOD_CH_PRONE_DIST: "0.10"               # ChanceAtDistanceProne
+      AIMOD_CH_PRONE_CLOSE: "30.0"              # ChanceAtCloseRangeProne
+
+      # Ouïe
+      AIMOD_HEAR_AWARE_RADIAL: "3000.0"
+      AIMOD_HEAR_AWARE_GUNSHOT: "12000.0"
+      AIMOD_HEAR_AWARE_SPRINT: "2500.0"
+      AIMOD_HEAR_AWARE_FOOT: "1000.0"
+      AIMOD_HEAR_DIST_SPRINT: "4500.0"
+      AIMOD_HEAR_DIST_RUN: "2500.0"
+      AIMOD_HEAR_Z_MIN: "200.0"
+      AIMOD_HEAR_Z_MAX: "500.0"
+      AIMOD_HEAR_FENCED_MOD: "0.80"            # FencedTargetHearAbilityModifier
+
+      # Vitesse de rotation (plus nerveux)
+      AIMOD_TURNSPD_MAX_ANGLE_TH: "300"
+      AIMOD_TURNSPD_MIN_ANGLE_TH: "30"
+      AIMOD_TURNSPD_MAX: "120"                  # TurnSpeedMaxAngle
+      AIMOD_TURNSPD_MIN: "120"                  # TurnSpeedMinAngle
+      AIMOD_TURNSPD_DIST_TH: "2500.0"
+      AIMOD_TURNSPD_SCALE_MAX: "2.0"
+
+      # Délai d’engagement & distance
+      AIMOD_ATTACK_DELAY_CLOSE: "0.10"
+      AIMOD_ATTACK_DELAY_DIST: "0.25"
+      AIMOD_ATTACK_DELAY_MELEE: "0.30"
+      AIMOD_DISTANCE_RANGE: "18000.0"
+      AIMOD_CLOSE_RANGE: "900.0"
+      AIMOD_MID_RANGE: "4000.0"
+
+      # Précision / bloatbox
+      AIMOD_ACCURACY_MULT: "2.8"                # AccuracyMultiplier
+      AIMOD_SUPPRESS_ACCURACY_MULT: "0.8"       # SuppressionAccuracyMultiplier
+      AIMOD_NIGHT_ACC_FACTOR: "1.0"             # NightAccuracyFactor (pas de malus)
+      AIMOD_ZERO_TIME_EASY: "1.5"
+      AIMOD_ZERO_TIME_HARD: "0.25"
+      AIMOD_BLOAT_MULT_EASY: "1.5"
+      AIMOD_BLOAT_MULT_HARD: "0.25"
+      AIMOD_BLOAT_DIST_MULT: "1.2"
+      AIMOD_BLOAT_MAX_DIST: "25000.0"
+      AIMOD_BLOAT_MIN_DIST: "1500.0"
+
+      # Comportements offensifs
+      AIMOD_CHANCE_COVER: "0.9"                 # Chance2Cover
+      AIMOD_CHANCE_COVER_IMPRO: "0.60"          # Chance2ImprovisedCover
+      AIMOD_CHANCE_COVER_FAR: "0.50"            # Chance2CoverFar
+      AIMOD_MAX_DIST_2COVER: "3500"
+      AIMOD_CHANCE_WANDER: "0.10"
+      AIMOD_DEF_WANDER_DIST: "6500.0"
+      AIMOD_WANDER_DIST_MAX_MULT: "2.0"
+      AIMOD_CHANCE_FLANK: "0.60"
+      AIMOD_CHANCE_RUSH: "0.90"
+      AIMOD_CHANCE_HUNT: "0.80"
+      AIMOD_CHANCE_FORCE_HUNT: "0.60"
+      AIMOD_CHANCE_REGROUP: "0.40"
+      AIMOD_BONUS_SPOT_START: "2200.0"
+      AIMOD_MAX_BONUS_SPOT_HEAR: "0.98"
+      AIMOD_MAX_BONUS_SPOT_ALERT: "0.10"
+      AIMOD_CH_LEAN_MULT: "1.0"                 # ChanceLeanMultiplier (meilleure détection en lean)
+      AIMOD_MIN_CHANCE_HEAR: "0.10"
+      AIMOD_INJ_DMG_TH: "30"
+      AIMOD_INJ_HP_RATIO: "0.40"
+      AIMOD_DIST_NEAR_OBJ: "2200.0"
+      AIMOD_DIST_MID_OBJ: "3800.0"
+      AIMOD_DIST_FAR_OBJ: "9000.0"
+      AIMOD_RATIO_BOTS_CLOSE_OBJ: "0.6"
+      AIMOD_STOP_FIRE_NLOS_MIN: "2.0"
+      AIMOD_STOP_FIRE_NLOS_MAX: "5.0"
+      AIMOD_SUPPR_TIME_MIN: "6.0"
+      AIMOD_SUPPR_TIME_MAX: "12.0"
+      AIMOD_SUPPR_MIN_DIST: "300.0"
+      AIMOD_SUPPR_BASE_CH: "0.30"
+      AIMOD_SUPPR_ADD_FRIEND: "0.20"
+      AIMOD_HEAD2BODY_RATIO: "0.70"             # vise davantage la tête
+
+      # Difficulté variable (overwrite INSCoopMode si utilisé par le mutator)
+      AIMOD_VAR_PC_MIN: "1"                     # PlayerCountForMinAIDifficulty
+      AIMOD_VAR_PC_MAX: "12"
+      AIMOD_VAR_MIN_DIFFICULTY: "0.70"
+      AIMOD_VAR_MAX_DIFFICULTY: "1.00"
+
+      # Misc utiles
+      AIMOD_OVERWRITE_BOTCFG: "True"            # bOverwriteBotSkillCfg
+      AIMOD_BOT_USES_SMOKE: "True"
+      AIMOD_SUPPR_4MG_ONLY: "True"
+      AIMOD_MEMORY_MAX_AGE: "120.0"
+      AIMOD_RATIO_AIM_HEAD: "0.70"
+
+      # (Déjà posés précédemment)
+      AIMOD_ALLOW_MELEE: "0"
+      AIMOD_STAY_IN_SQUADS: "1"
+      AIMOD_SQUAD_SIZE: "6"
+
 
     stop_grace_period: 30s
     stdin_open: true
