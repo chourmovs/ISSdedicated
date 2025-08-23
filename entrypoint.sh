@@ -479,7 +479,7 @@ add_arg "AIModifier.AllowMelee" "${AIMOD_ALLOW_MELEE}"
 add_arg "AIModifier.StayInSquads" "${AIMOD_STAY_IN_SQUADS}"
 add_arg "AIModifier.SquadSize" "${AIMOD_SQUAD_SIZE}"
 
-f [ "${#AIMOD_ARGS[@]}" -gt 0 ]; then
+if [ "${#AIMOD_ARGS[@]}" -gt 0 ]; then
   # Construire la chaîne sans toucher à l'IFS global
   SS_MUTATOR_URL_ARGS="$(printf '%s' "${AIMOD_ARGS[0]}")"
   for ((i=1; i<${#AIMOD_ARGS[@]}; i++)); do
