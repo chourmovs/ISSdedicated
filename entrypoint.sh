@@ -193,31 +193,138 @@ case "${MODE_UPPER}" in
 esac
 echo "🎮 Mode deduced → ${SS_GAME_MODE} (${MODE_SECTION})"
 
+
 # ─────────────────────────────────────────
-# 6) AiModifier placeholders → SS_MUTATOR_URL_ARGS
+#  6) AiModifier placeholders → URL args (ENRAGED capable)
 # ─────────────────────────────────────────
 echo "🧩 Building AiModifier URL args from placeholders..."
 AIMOD_ARGS=()
 
-[ -n "${AIMOD_DIFFICULTY}" ]  && AIMOD_ARGS+=("AIModifier.Difficulty=${AIMOD_DIFFICULTY}")
-[ -n "${AIMOD_ACCURACY}" ]    && AIMOD_ARGS+=("AIModifier.Accuracy=${AIMOD_ACCURACY}")
-[ -n "${AIMOD_REACTION}" ]    && AIMOD_ARGS+=("AIModifier.ReactionTime=${AIMOD_REACTION}")
+# Skill de base
+[ -n "${AIMOD_DIFFICULTY:-}" ]  && AIMOD_ARGS+=("AIModifier.Difficulty=${AIMOD_DIFFICULTY}")
+[ -n "${AIMOD_ACCURACY:-}" ]    && AIMOD_ARGS+=("AIModifier.Accuracy=${AIMOD_ACCURACY}")
+[ -n "${AIMOD_REACTION:-}" ]    && AIMOD_ARGS+=("AIModifier.ReactionTime=${AIMOD_REACTION}")
 
-[ -n "${AIMOD_MAXCOUNT}" ]    && AIMOD_ARGS+=("AIModifier.MaxCount=${AIMOD_MAXCOUNT}")
-[ -n "${AIMOD_RESPAWN_MIN}" ] && AIMOD_ARGS+=("AIModifier.MinRespawnDelay=${AIMOD_RESPAWN_MIN}")
-[ -n "${AIMOD_RESPAWN_MAX}" ] && AIMOD_ARGS+=("AIModifier.MaxRespawnDelay=${AIMOD_RESPAWN_MAX}")
-[ -n "${AIMOD_SPAWN_DELAY}" ] && AIMOD_ARGS+=("AIModifier.SpawnDelay=${AIMOD_SPAWN_DELAY}")
+# Sight / vision
+[ -n "${AIMOD_SIGHT_ALERT:-}" ]         && AIMOD_ARGS+=("AIModifier.SightRangeAlert=${AIMOD_SIGHT_ALERT}")
+[ -n "${AIMOD_SIGHT_IDLE:-}" ]          && AIMOD_ARGS+=("AIModifier.SightRangeIdle=${AIMOD_SIGHT_IDLE}")
+[ -n "${AIMOD_SIGHT_SMOKE:-}" ]         && AIMOD_ARGS+=("AIModifier.SightRangeWithinSmokeGrenade=${AIMOD_SIGHT_SMOKE}")
+[ -n "${AIMOD_SIGHT_SMOKE_EYE:-}" ]     && AIMOD_ARGS+=("AIModifier.SightRangeWithinSmokeGrenadeEye=${AIMOD_SIGHT_SMOKE_EYE}")
+[ -n "${AIMOD_SIGHT_SMOKE_EYE_FRAC:-}" ]&& AIMOD_ARGS+=("AIModifier.SightRangeSmokeEyeFrac=${AIMOD_SIGHT_SMOKE_EYE_FRAC}")
+[ -n "${AIMOD_MIN_LI_SEE:-}" ]          && AIMOD_ARGS+=("AIModifier.MinLightIntensityToSeeTarget=${AIMOD_MIN_LI_SEE}")
+[ -n "${AIMOD_MIN_LI_NIGHT:-}" ]        && AIMOD_ARGS+=("AIModifier.MinLightIntensitytoSeeTargetatNight=${AIMOD_MIN_LI_NIGHT}")
+[ -n "${AIMOD_LI_FULLY_VISIBLE:-}" ]    && AIMOD_ARGS+=("AIModifier.LightIntensityforFullyVisibleTarget=${AIMOD_LI_FULLY_VISIBLE}")
+[ -n "${AIMOD_TIME_NOTICE_VISIB_MULT:-}" ] && AIMOD_ARGS+=("AIModifier.TimetoNoticeVisibilityMultiplier=${AIMOD_TIME_NOTICE_VISIB_MULT}")
+[ -n "${AIMOD_MIN_LI_AFFECT_NV:-}" ]    && AIMOD_ARGS+=("AIModifier.MinLightIntensitytoAffectNightVision=${AIMOD_MIN_LI_AFFECT_NV}")
+[ -n "${AIMOD_MIN_NV_STRENGTH:-}" ]     && AIMOD_ARGS+=("AIModifier.MinNightVisionSightStrength=${AIMOD_MIN_NV_STRENGTH}")
 
-[ -n "${AIMOD_ALLOW_MELEE}" ]   && AIMOD_ARGS+=("AIModifier.AllowMelee=${AIMOD_ALLOW_MELEE}")
-[ -n "${AIMOD_STAY_IN_SQUADS}" ]&& AIMOD_ARGS+=("AIModifier.StayInSquads=${AIMOD_STAY_IN_SQUADS}")
-[ -n "${AIMOD_SQUAD_SIZE}" ]    && AIMOD_ARGS+=("AIModifier.SquadSize=${AIMOD_SQUAD_SIZE}")
+# Chances d’être spotté
+[ -n "${AIMOD_CH_SPRINT_MULT:-}" ]      && AIMOD_ARGS+=("AIModifier.ChanceSprintMultiplier=${AIMOD_CH_SPRINT_MULT}")
+[ -n "${AIMOD_CH_MOVING_MULT:-}" ]      && AIMOD_ARGS+=("AIModifier.ChanceMovingMultiplier=${AIMOD_CH_MOVING_MULT}")
+[ -n "${AIMOD_CH_STAND_DIST:-}" ]       && AIMOD_ARGS+=("AIModifier.ChanceAtDistanceStanding=${AIMOD_CH_STAND_DIST}")
+[ -n "${AIMOD_CH_STAND_CLOSE:-}" ]      && AIMOD_ARGS+=("AIModifier.ChanceAtCloseRangeStanding=${AIMOD_CH_STAND_CLOSE}")
+[ -n "${AIMOD_CH_CROUCH_DIST:-}" ]      && AIMOD_ARGS+=("AIModifier.ChanceAtDistanceCrouched=${AIMOD_CH_CROUCH_DIST}")
+[ -n "${AIMOD_CH_CROUCH_CLOSE:-}" ]     && AIMOD_ARGS+=("AIModifier.ChanceAtCloseRangeCrouched=${AIMOD_CH_CROUCH_CLOSE}")
+[ -n "${AIMOD_CH_PRONE_DIST:-}" ]       && AIMOD_ARGS+=("AIModifier.ChanceAtDistanceProne=${AIMOD_CH_PRONE_DIST}")
+[ -n "${AIMOD_CH_PRONE_CLOSE:-}" ]      && AIMOD_ARGS+=("AIModifier.ChanceAtCloseRangeProne=${AIMOD_CH_PRONE_CLOSE}")
+
+# Ouïe
+[ -n "${AIMOD_HEAR_AWARE_RADIAL:-}" ]   && AIMOD_ARGS+=("AIModifier.HearAwareDistanceRadial=${AIMOD_HEAR_AWARE_RADIAL}")
+[ -n "${AIMOD_HEAR_AWARE_GUNSHOT:-}" ]  && AIMOD_ARGS+=("AIModifier.HearAwareDistanceGunshot=${AIMOD_HEAR_AWARE_GUNSHOT}")
+[ -n "${AIMOD_HEAR_AWARE_SPRINT:-}" ]   && AIMOD_ARGS+=("AIModifier.HearAwareDistanceSprintFootstep=${AIMOD_HEAR_AWARE_SPRINT}")
+[ -n "${AIMOD_HEAR_AWARE_FOOT:-}" ]     && AIMOD_ARGS+=("AIModifier.HearAwareDistanceFootsteps=${AIMOD_HEAR_AWARE_FOOT}")
+[ -n "${AIMOD_HEAR_DIST_SPRINT:-}" ]    && AIMOD_ARGS+=("AIModifier.HearDistanceFootstepsSprinting=${AIMOD_HEAR_DIST_SPRINT}")
+[ -n "${AIMOD_HEAR_DIST_RUN:-}" ]       && AIMOD_ARGS+=("AIModifier.HearDistanceFootstepsRunning=${AIMOD_HEAR_DIST_RUN}")
+[ -n "${AIMOD_HEAR_Z_MIN:-}" ]          && AIMOD_ARGS+=("AIModifier.HearAbilityZOffsetMin=${AIMOD_HEAR_Z_MIN}")
+[ -n "${AIMOD_HEAR_Z_MAX:-}" ]          && AIMOD_ARGS+=("AIModifier.HearAbilityZOffsetMax=${AIMOD_HEAR_Z_MAX}")
+[ -n "${AIMOD_HEAR_FENCED_MOD:-}" ]     && AIMOD_ARGS+=("AIModifier.FencedTargetHearAbilityModifier=${AIMOD_HEAR_FENCED_MOD}")
+
+# Vitesse de rotation
+[ -n "${AIMOD_TURNSPD_MAX_ANGLE_TH:-}" ]&& AIMOD_ARGS+=("AIModifier.TurnSpeedMaxAngleThreshold=${AIMOD_TURNSPD_MAX_ANGLE_TH}")
+[ -n "${AIMOD_TURNSPD_MIN_ANGLE_TH:-}" ]&& AIMOD_ARGS+=("AIModifier.TurnSpeedMinAngleThreshold=${AIMOD_TURNSPD_MIN_ANGLE_TH}")
+[ -n "${AIMOD_TURNSPD_MAX:-}" ]         && AIMOD_ARGS+=("AIModifier.TurnSpeedMaxAngle=${AIMOD_TURNSPD_MAX}")
+[ -n "${AIMOD_TURNSPD_MIN:-}" ]         && AIMOD_ARGS+=("AIModifier.TurnSpeedMinAngle=${AIMOD_TURNSPD_MIN}")
+[ -n "${AIMOD_TURNSPD_DIST_TH:-}" ]     && AIMOD_ARGS+=("AIModifier.TurnSpeedDistanceThreshold=${AIMOD_TURNSPD_DIST_TH}")
+[ -n "${AIMOD_TURNSPD_SCALE_MAX:-}" ]   && AIMOD_ARGS+=("AIModifier.TurnSpeedScaleModifierMax=${AIMOD_TURNSPD_SCALE_MAX}")
+
+# Attaque & distances
+[ -n "${AIMOD_ATTACK_DELAY_CLOSE:-}" ]  && AIMOD_ARGS+=("AIModifier.AttackDelayClose=${AIMOD_ATTACK_DELAY_CLOSE}")
+[ -n "${AIMOD_ATTACK_DELAY_DIST:-}" ]   && AIMOD_ARGS+=("AIModifier.AttackDelayDistant=${AIMOD_ATTACK_DELAY_DIST}")
+[ -n "${AIMOD_ATTACK_DELAY_MELEE:-}" ]  && AIMOD_ARGS+=("AIModifier.AttackDelayMelee=${AIMOD_ATTACK_DELAY_MELEE}")
+[ -n "${AIMOD_DISTANCE_RANGE:-}" ]      && AIMOD_ARGS+=("AIModifier.DistanceRange=${AIMOD_DISTANCE_RANGE}")
+[ -n "${AIMOD_CLOSE_RANGE:-}" ]         && AIMOD_ARGS+=("AIModifier.CloseRange=${AIMOD_CLOSE_RANGE}")
+[ -n "${AIMOD_MID_RANGE:-}" ]           && AIMOD_ARGS+=("AIModifier.MiddleRange=${AIMOD_MID_RANGE}")
+
+# Précision / bloatbox
+[ -n "${AIMOD_ACCURACY_MULT:-}" ]       && AIMOD_ARGS+=("AIModifier.AccuracyMultiplier=${AIMOD_ACCURACY_MULT}")
+[ -n "${AIMOD_SUPPRESS_ACCURACY_MULT:-}" ] && AIMOD_ARGS+=("AIModifier.SuppressionAccuracyMultiplier=${AIMOD_SUPPRESS_ACCURACY_MULT}")
+[ -n "${AIMOD_NIGHT_ACC_FACTOR:-}" ]    && AIMOD_ARGS+=("AIModifier.NightAccuracyFactor=${AIMOD_NIGHT_ACC_FACTOR}")
+[ -n "${AIMOD_ZERO_TIME_EASY:-}" ]      && AIMOD_ARGS+=("AIModifier.ZeroTimeMultiplierEasy=${AIMOD_ZERO_TIME_EASY}")
+[ -n "${AIMOD_ZERO_TIME_HARD:-}" ]      && AIMOD_ARGS+=("AIModifier.ZeroTimeMultiplierHard=${AIMOD_ZERO_TIME_HARD}")
+[ -n "${AIMOD_BLOAT_MULT_EASY:-}" ]     && AIMOD_ARGS+=("AIModifier.BloatBoxMultiplierEasy=${AIMOD_BLOAT_MULT_EASY}")
+[ -n "${AIMOD_BLOAT_MULT_HARD:-}" ]     && AIMOD_ARGS+=("AIModifier.BloatBoxMultiplierHard=${AIMOD_BLOAT_MULT_HARD}")
+[ -n "${AIMOD_BLOAT_DIST_MULT:-}" ]     && AIMOD_ARGS+=("AIModifier.BloatBoxMultiplierDistance=${AIMOD_BLOAT_DIST_MULT}")
+[ -n "${AIMOD_BLOAT_MAX_DIST:-}" ]      && AIMOD_ARGS+=("AIModifier.BloatBoxMultiplierMaxDistance=${AIMOD_BLOAT_MAX_DIST}")
+[ -n "${AIMOD_BLOAT_MIN_DIST:-}" ]      && AIMOD_ARGS+=("AIModifier.BloatBoxMultiplierMinDistance=${AIMOD_BLOAT_MIN_DIST}")
+
+# Comportements offensifs
+[ -n "${AIMOD_CHANCE_COVER:-}" ]        && AIMOD_ARGS+=("AIModifier.Chance2Cover=${AIMOD_CHANCE_COVER}")
+[ -n "${AIMOD_CHANCE_COVER_IMPRO:-}" ]  && AIMOD_ARGS+=("AIModifier.Chance2ImprovisedCover=${AIMOD_CHANCE_COVER_IMPRO}")
+[ -n "${AIMOD_CHANCE_COVER_FAR:-}" ]    && AIMOD_ARGS+=("AIModifier.Chance2CoverFar=${AIMOD_CHANCE_COVER_FAR}")
+[ -n "${AIMOD_MAX_DIST_2COVER:-}" ]     && AIMOD_ARGS+=("AIModifier.MaxDistance2Cover=${AIMOD_MAX_DIST_2COVER}")
+[ -n "${AIMOD_CHANCE_WANDER:-}" ]       && AIMOD_ARGS+=("AIModifier.Chance2Wander=${AIMOD_CHANCE_WANDER}")
+[ -n "${AIMOD_DEF_WANDER_DIST:-}" ]     && AIMOD_ARGS+=("AIModifier.DefaultWanderDistance=${AIMOD_DEF_WANDER_DIST}")
+[ -n "${AIMOD_WANDER_DIST_MAX_MULT:-}" ]&& AIMOD_ARGS+=("AIModifier.WanderDistanceMaxMultiplier=${AIMOD_WANDER_DIST_MAX_MULT}")
+[ -n "${AIMOD_CHANCE_FLANK:-}" ]        && AIMOD_ARGS+=("AIModifier.Chance2Flank=${AIMOD_CHANCE_FLANK}")
+[ -n "${AIMOD_CHANCE_RUSH:-}" ]         && AIMOD_ARGS+=("AIModifier.Chance2Rush=${AIMOD_CHANCE_RUSH}")
+[ -n "${AIMOD_CHANCE_HUNT:-}" ]         && AIMOD_ARGS+=("AIModifier.Chance2Hunt=${AIMOD_CHANCE_HUNT}")
+[ -n "${AIMOD_CHANCE_FORCE_HUNT:-}" ]   && AIMOD_ARGS+=("AIModifier.Chance2ForceHunt=${AIMOD_CHANCE_FORCE_HUNT}")
+[ -n "${AIMOD_CHANCE_REGROUP:-}" ]      && AIMOD_ARGS+=("AIModifier.Chance2Regroup=${AIMOD_CHANCE_REGROUP}")
+[ -n "${AIMOD_BONUS_SPOT_START:-}" ]    && AIMOD_ARGS+=("AIModifier.bonusSpotLossStartingDistance=${AIMOD_BONUS_SPOT_START}")
+[ -n "${AIMOD_MAX_BONUS_SPOT_HEAR:-}" ] && AIMOD_ARGS+=("AIModifier.maxBonusSpotChanceHearing=${AIMOD_MAX_BONUS_SPOT_HEAR}")
+[ -n "${AIMOD_MAX_BONUS_SPOT_ALERT:-}" ]&& AIMOD_ARGS+=("AIModifier.maxBonusSpotChanceAlert=${AIMOD_MAX_BONUS_SPOT_ALERT}")
+[ -n "${AIMOD_CH_LEAN_MULT:-}" ]        && AIMOD_ARGS+=("AIModifier.ChanceLeanMultiplier=${AIMOD_CH_LEAN_MULT}")
+[ -n "${AIMOD_MIN_CHANCE_HEAR:-}" ]     && AIMOD_ARGS+=("AIModifier.minChance2Hear=${AIMOD_MIN_CHANCE_HEAR}")
+[ -n "${AIMOD_INJ_DMG_TH:-}" ]          && AIMOD_ARGS+=("AIModifier.InjuredDmgThreshold=${AIMOD_INJ_DMG_TH}")
+[ -n "${AIMOD_INJ_HP_RATIO:-}" ]        && AIMOD_ARGS+=("AIModifier.InjuredHPRatioThreshold=${AIMOD_INJ_HP_RATIO}")
+[ -n "${AIMOD_DIST_NEAR_OBJ:-}" ]       && AIMOD_ARGS+=("AIModifier.DistanceNear2Objective=${AIMOD_DIST_NEAR_OBJ}")
+[ -n "${AIMOD_DIST_MID_OBJ:-}" ]        && AIMOD_ARGS+=("AIModifier.DistanceMid2Objective=${AIMOD_DIST_MID_OBJ}")
+[ -n "${AIMOD_DIST_FAR_OBJ:-}" ]        && AIMOD_ARGS+=("AIModifier.DistanceFar2Objective=${AIMOD_DIST_FAR_OBJ}")
+[ -n "${AIMOD_RATIO_BOTS_CLOSE_OBJ:-}" ]&& AIMOD_ARGS+=("AIModifier.ratioBotsClose2Objective=${AIMOD_RATIO_BOTS_CLOSE_OBJ}")
+[ -n "${AIMOD_STOP_FIRE_NLOS_MIN:-}" ]  && AIMOD_ARGS+=("AIModifier.minTime2StopFiringNLOS=${AIMOD_STOP_FIRE_NLOS_MIN}")
+[ -n "${AIMOD_STOP_FIRE_NLOS_MAX:-}" ]  && AIMOD_ARGS+=("AIModifier.maxTime2StopFiringNLOS=${AIMOD_STOP_FIRE_NLOS_MAX}")
+[ -n "${AIMOD_SUPPR_TIME_MIN:-}" ]      && AIMOD_ARGS+=("AIModifier.minSuppressionTime=${AIMOD_SUPPR_TIME_MIN}")
+[ -n "${AIMOD_SUPPR_TIME_MAX:-}" ]      && AIMOD_ARGS+=("AIModifier.maxSuppressionTime=${AIMOD_SUPPR_TIME_MAX}")
+[ -n "${AIMOD_SUPPR_MIN_DIST:-}" ]      && AIMOD_ARGS+=("AIModifier.SuppressionMinDistance=${AIMOD_SUPPR_MIN_DIST}")
+[ -n "${AIMOD_SUPPR_BASE_CH:-}" ]       && AIMOD_ARGS+=("AIModifier.BaseChance2Suppress=${AIMOD_SUPPR_BASE_CH}")
+[ -n "${AIMOD_SUPPR_ADD_FRIEND:-}" ]    && AIMOD_ARGS+=("AIModifier.AddChance2SuppressPerFriend=${AIMOD_SUPPR_ADD_FRIEND}")
+[ -n "${AIMOD_HEAD2BODY_RATIO:-}" ]     && AIMOD_ARGS+=("AIModifier.ratioAimingHead2Body=${AIMOD_HEAD2BODY_RATIO}")
+
+# Difficulté variable
+[ -n "${AIMOD_VAR_PC_MIN:-}" ]          && AIMOD_ARGS+=("AIModifier.PlayerCountForMinAIDifficulty=${AIMOD_VAR_PC_MIN}")
+[ -n "${AIMOD_VAR_PC_MAX:-}" ]          && AIMOD_ARGS+=("AIModifier.PlayerCountForMaxAIDifficulty=${AIMOD_VAR_PC_MAX}")
+[ -n "${AIMOD_VAR_MIN_DIFFICULTY:-}" ]  && AIMOD_ARGS+=("AIModifier.MinAIDifficulty=${AIMOD_VAR_MIN_DIFFICULTY}")
+[ -n "${AIMOD_VAR_MAX_DIFFICULTY:-}" ]  && AIMOD_ARGS+=("AIModifier.MaxAIDifficulty=${AIMOD_VAR_MAX_DIFFICULTY}")
+
+# Misc
+[ -n "${AIMOD_OVERWRITE_BOTCFG:-}" ]    && AIMOD_ARGS+=("AIModifier.bOverwriteBotSkillCfg=${AIMOD_OVERWRITE_BOTCFG}")
+[ -n "${AIMOD_BOT_USES_SMOKE:-}" ]      && AIMOD_ARGS+=("AIModifier.bBotUsesSmokeGrenade=${AIMOD_BOT_USES_SMOKE}")
+[ -n "${AIMOD_SUPPR_4MG_ONLY:-}" ]      && AIMOD_ARGS+=("AIModifier.bSuppression4MgOnly=${AIMOD_SUPPR_4MG_ONLY}")
+[ -n "${AIMOD_MEMORY_MAX_AGE:-}" ]      && AIMOD_ARGS+=("AIModifier.MemoryMaxAge=${AIMOD_MEMORY_MAX_AGE}")
+[ -n "${AIMOD_RATIO_AIM_HEAD:-}" ]      && AIMOD_ARGS+=("AIModifier.ratioAimingHead2Body=${AIMOD_RATIO_AIM_HEAD}")
+
+# “Pas de couteau” & “rester en squads” (déjà présents)
+[ -n "${AIMOD_ALLOW_MELEE:-}" ]         && AIMOD_ARGS+=("AIModifier.AllowMelee=${AIMOD_ALLOW_MELEE}")
+[ -n "${AIMOD_STAY_IN_SQUADS:-}" ]      && AIMOD_ARGS+=("AIModifier.StayInSquads=${AIMOD_STAY_IN_SQUADS}")
+[ -n "${AIMOD_SQUAD_SIZE:-}" ]          && AIMOD_ARGS+=("AIModifier.SquadSize=${AIMOD_SQUAD_SIZE}")
 
 if [ ${#AIMOD_ARGS[@]} -gt 0 ]; then
   SS_MUTATOR_URL_ARGS="$(IFS='?'; echo "${AIMOD_ARGS[*]}")"
-  echo "   → SS_MUTATOR_URL_ARGS composed: '${SS_MUTATOR_URL_ARGS}'"
+  echo "   → SS_MUTATOR_URL_ARGS composed (${#AIMOD_ARGS[@]} keys)."
 else
-  echo "   → No AIMOD_* placeholders provided; SS_MUTATOR_URL_ARGS unchanged."
+  echo "   → No AIMOD_* placeholders provided."
 fi
+
 
 # ─────────────────────────────────────────
 # 7) Première écriture Game.ini (base)
