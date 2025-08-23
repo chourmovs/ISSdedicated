@@ -1,69 +1,75 @@
-version: "3.8"
-
+version: "3.9"
 services:
   sandstorm:
-    image: chourmovs/issdedicated:main          # ← remplace par ton image
+    image: chourmovs/issdedicated:main
     container_name: sandstorm
     restart: unless-stopped
-    stop_grace_period: 30s
-
     ports:
       - "27102:27102/udp"   # Game
       - "27131:27131/udp"   # Query
       - "15000:15000/udp"   # Beacon
-      - "27015:27015/tcp"   # RCON (optionnel)
+      - "27015:27015/tcp"   # RCON (laisser mappé même si vide)
+    volumes:
+      - /opt/sandstorm:/opt/sandstorm      # binaires + configs + mods
+      - /opt/steam:/home/steam/Steam       # cache SteamCMD
+    user: "1000:1000"
 
     environment:
-      # Identité / Réseau
-      SS_HOSTNAME: "Chourmovs ISS (PvP)"
-      PORT: "27102"
-      QUERYPORT: "27131"
-      BEACONPORT: "15000"
+      # --- Identité / slots ---
+      SS_HOSTNAME: "CHOURMOVS ISS (Push)• 8x8 Bots 0.6"
+      SS_MAXPLAYERS: "28"                  # laisse haut pour autoriser bcp de bots
 
-      # Map/Mode/Scénario
+      # --- Mode / Scénario ---
       SS_GAME_MODE: "Push"
       SS_SCENARIO: "Scenario_Farmhouse_Push_Security"
-      SS_MAXPLAYERS: "28"
+      SS_MAPCYCLE: |
+        Scenario_Farmhouse_Push_Security
+        Scenario_Crossing_Push_Security
+        Scenario_Hideout_Push_Security
 
-      # Bots (versus)
+      # --- Bots ---
       SS_BOTS_ENABLED: "1"
-      SS_BOT_NUM: "10"
-      SS_BOT_QUOTA: "1.5"
-      SS_BOT_DIFFICULTY: "0.7"
+      SS_BOT_NUM: "1"          # alliés minimaux
+      SS_BOT_QUOTA: "8.0"      # ennemis multipliés
+      SS_BOT_DIFFICULTY: "0.6"
 
-      # Auto-balance
+      # --- Auto-balance ---
       SS_AUTO_BALANCE: "False"
       SS_AUTO_BALANCE_DELAY: "10"
 
-      # QOL
+      # --- QOL ---
       SS_KILL_FEED: "1"
       SS_KILL_CAMERA: "0"
       SS_VOICE_ENABLED: "1"
-      SS_FRIENDLY_FIRE_SCALE: "0.2"
+      SS_FRIENDLY_FIRE_SCALE: "0.0"
+
+      # --- Timings / Vote ---
       SS_ROUND_TIME: "900"
       SS_POST_ROUND_TIME: "15"
       SS_VOTE_ENABLED: "1"
       SS_VOTE_PERCENT: "0.6"
 
-      # ✨ XP & Stats
-      SS_ENABLE_STATS: "1"              # écrit bDisableStats=False dans Game.ini
-      GSLT_TOKEN: "${GSLT_TOKEN}"       # définis ces 2 variables dans Portainer (Env/Secrets)
+      # --- XP & Stats ---
+      SS_ENABLE_STATS: "1"                 # écrit bDisableStats=False
+      GSLT_TOKEN: "${GSLT_TOKEN}"          # ➜ définis-les dans Portainer (Env)
       GAMESTATS_TOKEN: "${GAMESTATS_TOKEN}"
-      RCON_PASSWORD: ""                 # ⚠️ doit être VIDE pour l’XP officiel
+      RCON_PASSWORD: ""                    # ⚠️ doit rester VIDE pour l’XP classé
 
-      # 🧩 MODS & MUTATORS
-      SS_MODS: "1141916"                # AiModifier (mod.io)
-      SS_MUTATORS: "AiModifier"         # nom du mutator
-      SS_MUTATOR_URL_ARGS: "AIModifier.MaxCount=30?AIModifier.Accuracy=0.8"
-      EXTRA_SERVER_ARGS: ""             # args bruts optionnels
+      # --- MODS & MUTATORS ---
+      SS_MODS: "1141916"                   # AiModifier (mod.io) → auto-téléchargé
+      SS_MUTATORS: "AiModifier"            # charge le mutator
+      # Paramètres URL optionnels du mutator (exemples AiModifier) :
+      # SS_MUTATOR_URL_ARGS: "AIModifier.MaxCount=30?AIModifier.Accuracy=0.8"
+      SS_MUTATOR_URL_ARGS: ""
+      EXTRA_SERVER_ARGS: ""                # args bruts optionnels
 
-      # Maintenance
+      # --- Admins (menu admin côté client) ---
+      # Liste de SteamID64 séparés par des virgules (17 chiffres)
+      SS_ADMINS: "76561197993001743"
+
+      # --- Maintenance ---
       AUTO_UPDATE: "1"
 
-    volumes:
-      - sandstorm_data:/opt/sandstorm        # binaires + configs + mods
-      - steam_cache:/home/steam/Steam        # cache SteamCMD
-
-volumes:
-  sandstorm_data:
-  steam_cache:
+    stop_grace_period: 30s
+    stdin_open: true
+    tty: true
