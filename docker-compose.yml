@@ -1,74 +1,93 @@
 version: "3.9"
+
 services:
   sandstorm:
     image: chourmovs/issdedicated:main
     container_name: sandstorm
     restart: unless-stopped
+
     ports:
       - "27102:27102/udp"   # Game
       - "27131:27131/udp"   # Query
       - "15000:15000/udp"   # Beacon
-      - "27015:27015/tcp"   # RCON (laisser mappé même si vide)
+      - "27015:27015/tcp"   # RCON (laisse mappé même si vide)
+
     volumes:
       - /opt/sandstorm:/opt/sandstorm      # binaires + configs + mods
       - /opt/steam:/home/steam/Steam       # cache SteamCMD
+
+    # garde ton UID/GID host
     user: "1000:1000"
 
     environment:
-      # --- Identité / slots ---
+      # ───────── Identité / slots ─────────
       SS_HOSTNAME: "CHOURMOVS ISS (Push)• 8x8 Bots 0.6"
-      SS_MAXPLAYERS: "28"                  # laisse haut pour autoriser bcp de bots
+      SS_MAXPLAYERS: "28"                   # laisse haut pour permettre bcp de bots
 
-      # --- Mode / Scénario ---
+      # ───────── Mode / Scénario / Cycle ─────────
       SS_GAME_MODE: "Push"
-      SS_SCENARIO: "Scenario_Farmhouse_Push_Security"
+      SS_SCENARIO: "Scenario_Farmhouse_Push_Security"   # safe & lisible
       SS_MAPCYCLE: |
         Scenario_Farmhouse_Push_Security
         Scenario_Crossing_Push_Security
         Scenario_Hideout_Push_Security
 
-      # --- Bots ---
+      # ───────── Bots VS ─────────
       SS_BOTS_ENABLED: "1"
-      SS_BOT_NUM: "1"          # alliés minimaux
-      SS_BOT_QUOTA: "8.0"      # ennemis multipliés
+      SS_BOT_NUM: "1"               # alliés minimaux
+      SS_BOT_QUOTA: "8.0"           # ratio ennemis
       SS_BOT_DIFFICULTY: "0.6"
 
-      # --- Auto-balance ---
+      # ───────── Auto-balance ─────────
       SS_AUTO_BALANCE: "False"
       SS_AUTO_BALANCE_DELAY: "10"
 
-      # --- QOL ---
+      # ───────── QOL ─────────
       SS_KILL_FEED: "1"
       SS_KILL_CAMERA: "0"
       SS_VOICE_ENABLED: "1"
       SS_FRIENDLY_FIRE_SCALE: "0.0"
 
-      # --- Timings / Vote ---
+      # ───────── Timings / Vote ─────────
       SS_ROUND_TIME: "900"
       SS_POST_ROUND_TIME: "15"
       SS_VOTE_ENABLED: "1"
       SS_VOTE_PERCENT: "0.6"
 
-      # --- XP & Stats ---
-      SS_ENABLE_STATS: "1"                 # écrit bDisableStats=False
-      GSLT_TOKEN: "${GSLT_TOKEN}"          # ➜ définis-les dans Portainer (Env)
-      GAMESTATS_TOKEN: "${GAMESTATS_TOKEN}"
-      RCON_PASSWORD: ""                    # ⚠️ doit rester VIDE pour l’XP classé
+      # ───────── XP classé (Stats) ─────────
+      # ⚠️ Pour que l’XP fonctionne : GSLT_TOKEN + GAMESTATS_TOKEN valides ET RCON_PASSWORD vide.
+      SS_ENABLE_STATS: "1"                 # l’entrypoint écrit bDisableStats=False
+      GSLT_TOKEN: "${GSLT_TOKEN}"          # crée sur https://steamcommunity.com/dev/managegameservers
+      GAMESTATS_TOKEN: "${GAMESTATS_TOKEN}"# récupère sur https://gamestats.sandstorm.game
+      RCON_PASSWORD: ""                    # doit rester vide pour l’XP classé
 
-      # --- MODS & MUTATORS ---
-      SS_MODS: "1141916"                   # AiModifier (mod.io) → auto-téléchargé
+      # ───────── Admin menu côté client ─────────
+      # Liste de SteamID64 (17 chiffres) séparés par des virgules.
+      SS_ADMINS: "76561198000000001,76561198000000002"
+
+      # ───────── Mods & Mutators ─────────
+      SS_MODS: "1141916"                   # AiModifier (mod.io) — auto-download
       SS_MUTATORS: "AiModifier"            # charge le mutator
-      # Paramètres URL optionnels du mutator (exemples AiModifier) :
-      # SS_MUTATOR_URL_ARGS: "AIModifier.MaxCount=30?AIModifier.Accuracy=0.8"
-      SS_MUTATOR_URL_ARGS: ""
+      SS_MUTATOR_URL_ARGS: ""              # rempli automatiquement via placeholders ci‑dessous
       EXTRA_SERVER_ARGS: ""                # args bruts optionnels
-
-      # --- Admins (menu admin côté client) ---
-      # Liste de SteamID64 séparés par des virgules (17 chiffres)
-      SS_ADMINS: "76561197993001743"
-
-      # --- Maintenance ---
       AUTO_UPDATE: "1"
+
+      # ───────── AiModifier (placeholders) ─────────
+      # Difficulté & skill
+      AIMOD_DIFFICULTY: "0.7"              # 0.0–1.0
+      AIMOD_ACCURACY: "0.8"                # 0.0–1.0
+      AIMOD_REACTION: "0.5"                # 0.0–1.0 (ReactionTime)
+
+      # Population & respawn
+      AIMOD_MAXCOUNT: "30"                 # nombre max de bots
+      AIMOD_RESPAWN_MIN: "5"               # sec
+      AIMOD_RESPAWN_MAX: "15"              # sec
+      AIMOD_SPAWN_DELAY: "2"               # sec
+
+      # Comportement : pas de couteau & rester groupés
+      AIMOD_ALLOW_MELEE: "0"               # 0 = pas de melee
+      AIMOD_STAY_IN_SQUADS: "1"            # 1 = rester en squads
+      AIMOD_SQUAD_SIZE: "6"                # taille d’un squad
 
     stop_grace_period: 30s
     stdin_open: true
