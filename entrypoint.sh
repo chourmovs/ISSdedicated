@@ -8,7 +8,8 @@
 # - MapCycle + déduction Asset depuis SCENARIO
 # - Logs détaillés + validations
 # ==================================================================
-set -euo pipefail
+
+set -eo pipefail
 
 # ─────────────────────────────────────────
 # 0) Variables / chemins (avec défauts)
@@ -333,11 +334,12 @@ echo "🎮 Default mode → ${SS_GAME_MODE} (${MODE_SECTION_DEF})"
 echo "🧩 Building AiModifier URL args from placeholders..."
 AIMOD_ARGS=()
 
-# Helper pour push si non vide (évite les copier/coller)
 add_arg() {
   local key="$1"
   local val="$2"
-  [ -n "$val" ] && AIMOD_ARGS+=("${key}=${val}")
+  if [ -n "${val:-}" ]; then
+    AIMOD_ARGS+=("${key}=${val}")
+  fi
 }
 
 # 1) Skill de base
@@ -477,11 +479,17 @@ add_arg "AIModifier.AllowMelee" "${AIMOD_ALLOW_MELEE}"
 add_arg "AIModifier.StayInSquads" "${AIMOD_STAY_IN_SQUADS}"
 add_arg "AIModifier.SquadSize" "${AIMOD_SQUAD_SIZE}"
 
-if [ ${#AIMOD_ARGS[@]} -gt 0 ]; then
-  # Chaîne au format "?k1=v1?k2=v2" (style que tu utilisais)
-  SS_MUTATOR_URL_ARGS="$(IFS='?'; echo "${AIMOD_ARGS[*]}")"
+f [ "${#AIMOD_ARGS[@]}" -gt 0 ]; then
+  # Construire la chaîne sans toucher à l'IFS global
+  SS_MUTATOR_URL_ARGS="$(printf '%s' "${AIMOD_ARGS[0]}")"
+  for ((i=1; i<${#AIMOD_ARGS[@]}; i++)); do
+    SS_MUTATOR_URL_ARGS="${SS_MUTATOR_URL_ARGS}?${AIMOD_ARGS[$i]}"
+  done
   echo "   → SS_MUTATOR_URL_ARGS composed (${#AIMOD_ARGS[@]} keys)."
+  echo "     preview: ${SS_MUTATOR_URL_ARGS:0:240}$( [ ${#SS_MUTATOR_URL_ARGS} -gt 240 ] && echo '...')"
+  echo "     total length: ${#SS_MUTATOR_URL_ARGS}"
 else
+  SS_MUTATOR_URL_ARGS=""
   echo "   → No AIMOD_* placeholders provided."
 fi
 
