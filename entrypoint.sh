@@ -158,6 +158,30 @@ case "${MODE_UPPER}" in
 esac
 
 # ─────────────────────────────────────────
+# Admins (Admins.txt + switch -AdminList)
+# ─────────────────────────────────────────
+: "${SS_ADMINS:=}"   # ex: "76561198000000001,76561198000000002"
+ADMINSDIR="${GAMEDIR}/Insurgency/Config/Server"
+ADMINSLIST_NAME="Admins"
+mkdir -p "${ADMINSDIR}"
+
+ADMINSLIST_PATH="${ADMINSDIR}/${ADMINSLIST_NAME}.txt"
+if [ -n "${SS_ADMINS}" ]; then
+  echo "🛡️  Writing ${ADMINSLIST_PATH}"
+  : > "${ADMINSLIST_PATH}"
+  IFS=',' read -ra _admins <<< "${SS_ADMINS}"
+  for id in "${_admins[@]}"; do
+    id_trim="$(echo "$id" | xargs)"
+    [[ "$id_trim" =~ ^[0-9]{17}$ ]] && echo "$id_trim" >> "${ADMINSLIST_PATH}"
+  done
+  echo "   → $(wc -l < "${ADMINSLIST_PATH}") admin(s) ajouté(s)."
+else
+  # crée le fichier vide si absent (certains serveurs aiment bien le switch même vide)
+  [ -f "${ADMINSLIST_PATH}" ] || : > "${ADMINSLIST_PATH}"
+fi
+
+
+# ─────────────────────────────────────────
 # Game.ini (core + stats + mods/mutators)
 # ─────────────────────────────────────────
 echo "🧩 Writing Game.ini..."
@@ -288,8 +312,8 @@ cd "${GAMEDIR}/Insurgency/Binaries/Linux"
 exec ./InsurgencyServer-Linux-Shipping \
   "${LAUNCH_URL}" \
   -hostname="${SS_HOSTNAME}" \
+  -AdminList="${ADMINSLIST_NAME}" \
   -Port="${PORT}" -QueryPort="${QUERYPORT}" -BeaconPort="${BEACONPORT}" \
-  -Rcon ${RCON_PASSWORD:+-RconPassword="${RCON_PASSWORD}"} \
   -log \
   ${EXTRA_SERVER_ARGS} \
   "${XP_ARGS[@]}"
