@@ -384,7 +384,7 @@ EOF
 echo "   → ${GAMEINI} (base) written."
 
 # ─────────────────────────────────────────
-# 8) Déduction Asset depuis SCENARIO (anti-range) + re-écriture
+# 7) Déduction Asset & mode depuis SCENARIO
 # ─────────────────────────────────────────
 if [[ -z "${SS_SCENARIO}" || ! "${SS_SCENARIO}" =~ ^Scenario_ ]]; then
   echo "⚠️  SS_SCENARIO invalid or empty ('${SS_SCENARIO:-<unset>}'), fallback → Scenario_Farmhouse_Push_Security"
@@ -401,7 +401,7 @@ case "${scenario_core}" in
   Refinery)   MAP_ASSET="Oilfield" ;;
   *)          MAP_ASSET="${scenario_core}" ;;
 esac
-# Juste après avoir calculé scenario_core et scenario_mode :
+
 case "${scenario_mode}" in
   PUSH)        MODE_SECTION="/Script/Insurgency.INSPushGameMode" ;;
   FIREFIGHT)   MODE_SECTION="/Script/Insurgency.INSFirefightGameMode" ;;
@@ -410,17 +410,25 @@ case "${scenario_mode}" in
   CHECKPOINT)  MODE_SECTION="/Script/Insurgency.INSCheckpointGameMode" ;;
   OUTPOST)     MODE_SECTION="/Script/Insurgency.INSOutpostGameMode" ;;
   SURVIVAL)    MODE_SECTION="/Script/Insurgency.INSSurvivalGameMode" ;;
-  *)           MODE_SECTION="/Script/Insurgency.INSPushGameMode" ; scenario_mode="PUSH" ;;
+  *)           MODE_SECTION="${MODE_SECTION_DEF}" ; scenario_mode="$(echo "${SS_GAME_MODE}" | tr '[:lower:]' '[:upper:]')" ;;
 esac
-
 echo "🧭 Scenario='${SS_SCENARIO}' → Asset='${MAP_ASSET}' | MODE='${scenario_mode}'"
 
-# Re-écriture alignée au scenario_mode (reproduit ton flux “long”)
-echo "📝 Rewriting Game.ini aligned to scenario..."
+# RULES_SECTION selon Coop (Checkpoint/Outpost/Survival) vs Versus
+if [[ "${scenario_mode}" == "CHECKPOINT" || "${scenario_mode}" == "OUTPOST" || "${scenario_mode}" == "SURVIVAL" ]]; then
+  RULES_SECTION="/Script/Insurgency.INSCoopMode"
+else
+  RULES_SECTION="/Script/Insurgency.INSMultiplayerMode"
+fi
+
+# ─────────────────────────────────────────
+# 8) Écriture unique de Game.ini aligné au scenario_mode
+# ─────────────────────────────────────────
+echo "📝 Writing Game.ini aligned to scenario..."
 {
   cat <<EOF
 ; ------------------------------------------------------------------
-; Insurgency Sandstorm - Game.ini (VERSUS / PvP) - aligned to scenario
+; Insurgency Sandstorm - Game.ini (aligned to scenario)
 ; ------------------------------------------------------------------
 
 [/Script/Insurgency.INSGameMode]
@@ -435,7 +443,6 @@ RequiredVotePercentage=${SS_VOTE_PERCENT}
 bDisableStats=$([ "${SS_ENABLE_STATS}" = "1" ] && echo "False" || echo "True")
 EOF
 
-  # Mods & Mutators de nouveau pour s'assurer qu'ils restent présents
   if [ -n "${SS_MODS}" ]; then
     IFS=',' read -ra _mods <<< "${SS_MODS}"
     for mid in "${_mods[@]}"; do
@@ -443,9 +450,7 @@ EOF
       [ -n "$mid_trim" ] && echo "Mods=${mid_trim}"
     done
   fi
-  if [ -n "${SS_MUTATORS}" ]; then
-    echo "Mutators=${SS_MUTATORS}"
-  fi
+  [ -n "${SS_MUTATORS}" ] && echo "Mutators=${SS_MUTATORS}"
 
   cat <<EOF
 
@@ -455,42 +460,19 @@ NumBots=${SS_BOT_NUM}
 BotQuota=${SS_BOT_QUOTA}
 BotDifficulty=${SS_BOT_DIFFICULTY}
 
-# Choisir rules section selon le mode (coop ou versus)
-if [[ "${scenario_mode}" == "CHECKPOINT" || "${scenario_mode}" == "OUTPOST" || "${scenario_mode}" == "SURVIVAL" ]]; then
-  RULES_SECTION="/Script/Insurgency.INSCoopMode"
-else
-  RULES_SECTION="/Script/Insurgency.INSMultiplayerMode"
-fi
-
-cat >> "${GAMEINI}" <<EOF
-
 ${RULES_SECTION}
 bAutoBalanceTeams=${SS_AUTO_BALANCE}
 AutoBalanceDelay=${SS_AUTO_BALANCE_DELAY}
 EOF
-
-
-[/Script/Insurgency.INSMultiplayerMode]
-bAutoBalanceTeams=${SS_AUTO_BALANCE}
-AutoBalanceDelay=${SS_AUTO_BALANCE_DELAY}
-EOF
 } > "${GAMEINI}"
-echo "   → ${GAMEINI} (aligned) rewritten."
+echo "   → ${GAMEINI} written."
 
 # ─────────────────────────────────────────
 # 9) Construction de l’URL de lancement
 # ─────────────────────────────────────────
-LAUNCH_URL="${MAP_ASSET}?Scenario=${SS_SCENARIO}?MaxPlayers=${SS_MAXPLAYERS}\
-?bBots=${SS_BOTS_ENABLED}?NumBots=${SS_BOT_NUM}?BotQuota=${SS_BOT_QUOTA}?BotDifficulty=${SS_BOT_DIFFICULTY}"
-
-# Mutators + Args en URL (double sécurité)
-if [ -n "${SS_MUTATORS}" ]; then
-  LAUNCH_URL="${LAUNCH_URL}?Mutators=${SS_MUTATORS}"
-fi
-if [ -n "${SS_MUTATOR_URL_ARGS}" ]; then
-  # Si SS_MUTATOR_URL_ARGS contient déjà des '?', on les garde, on chaîne simplement
-  LAUNCH_URL="${LAUNCH_URL}?${SS_MUTATOR_URL_ARGS}"
-fi
+LAUNCH_URL="${MAP_ASSET}?Scenario=${SS_SCENARIO}?MaxPlayers=${SS_MAXPLAYERS}?bBots=${SS_BOTS_ENABLED}?NumBots=${SS_BOT_NUM}?BotQuota=${SS_BOT_QUOTA}?BotDifficulty=${SS_BOT_DIFFICULTY}"
+[ -n "${SS_MUTATORS}" ] && LAUNCH_URL="${LAUNCH_URL}?Mutators=${SS_MUTATORS}"
+[ -n "${SS_MUTATOR_URL_ARGS}" ] && LAUNCH_URL="${LAUNCH_URL}?${SS_MUTATOR_URL_ARGS}"
 
 echo "▶️  Launch URL:"
 echo "    ${LAUNCH_URL}"
@@ -524,12 +506,18 @@ echo "    AdminList='${ADMINSLIST_NAME}' (${ADMINSLIST_PATH})"
 echo "    Extra args: '${EXTRA_SERVER_ARGS}'"
 echo "────────────────────────────────────────────────────────"
 
+# Construit les flags RCON uniquement si un mot de passe est fourni
+RCON_ARGS=()
+if [ -n "${RCON_PASSWORD}" ]; then
+  RCON_ARGS+=("-Rcon" "-RconPassword=${RCON_PASSWORD}")
+fi
+
 exec ./InsurgencyServer-Linux-Shipping \
   "${LAUNCH_URL}" \
   -hostname="${SS_HOSTNAME}" \
   -Port="${PORT}" -QueryPort="${QUERYPORT}" -BeaconPort="${BEACONPORT}" \
   -AdminList="${ADMINSLIST_NAME}" \
-  -Rcon ${RCON_PASSWORD:+-RconPassword="${RCON_PASSWORD}"} \
   -log \
   ${EXTRA_SERVER_ARGS} \
-  "${XP_ARGS[@]}"
+  "${XP_ARGS[@]}" \
+  "${RCON_ARGS[@]}"
