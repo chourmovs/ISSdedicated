@@ -455,6 +455,21 @@ NumBots=${SS_BOT_NUM}
 BotQuota=${SS_BOT_QUOTA}
 BotDifficulty=${SS_BOT_DIFFICULTY}
 
+# Choisir rules section selon le mode (coop ou versus)
+if [[ "${scenario_mode}" == "CHECKPOINT" || "${scenario_mode}" == "OUTPOST" || "${scenario_mode}" == "SURVIVAL" ]]; then
+  RULES_SECTION="/Script/Insurgency.INSCoopMode"
+else
+  RULES_SECTION="/Script/Insurgency.INSMultiplayerMode"
+fi
+
+cat >> "${GAMEINI}" <<EOF
+
+${RULES_SECTION}
+bAutoBalanceTeams=${SS_AUTO_BALANCE}
+AutoBalanceDelay=${SS_AUTO_BALANCE_DELAY}
+EOF
+
+
 [/Script/Insurgency.INSMultiplayerMode]
 bAutoBalanceTeams=${SS_AUTO_BALANCE}
 AutoBalanceDelay=${SS_AUTO_BALANCE_DELAY}
