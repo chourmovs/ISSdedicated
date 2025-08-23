@@ -27,8 +27,8 @@ APPID="${APPID:-581330}"
 # ─────────────────────────────────────────
 : "${SS_GAME_MODE:=Push}"              # Push | Firefight | Skirmish | Domination
 : "${SS_MAP:=Crossing}"                # informatif uniquement
-: "${SS_SCENARIO:=}"                   # on gère le fallback juste après
-: "${SS_MAPCYCLE:=}"                   # évite "unbound variable" si absent
+: "${SS_SCENARIO:=}"
+: "${SS_MAPCYCLE:=}"
 
 # Fallback anti-range si scénario vide ou invalide
 if [[ -z "${SS_SCENARIO}" || ! "${SS_SCENARIO}" =~ ^Scenario_ ]]; then
@@ -45,11 +45,10 @@ fi
 : "${SS_BOT_DIFFICULTY:=0.7}"
 
 # ─────────────────────────────────────────
-# Auto-balance (déséquilibre alliés vs ennemis)
+# Auto-balance
 # ─────────────────────────────────────────
-: "${SS_AUTO_BALANCE:=False}"     # True | False (placeholder pour Portainer)
-: "${SS_AUTO_BALANCE_DELAY:=10}"  # délai en secondes
-
+: "${SS_AUTO_BALANCE:=False}"     # True | False
+: "${SS_AUTO_BALANCE_DELAY:=10}"
 
 # ─────────────────────────────────────────
 # QOL / Timings / Vote
@@ -64,10 +63,22 @@ fi
 : "${SS_VOTE_PERCENT:=0.6}"
 
 # ─────────────────────────────────────────
-# Tokens XP (optionnels)
+# XP & Stats
 # ─────────────────────────────────────────
+: "${SS_ENABLE_STATS:=1}"              # écrit bDisableStats=False si =1
 : "${GSLT_TOKEN:=}"                    # AppID 581320
 : "${GAMESTATS_TOKEN:=}"               # https://gamestats.sandstorm.game
+
+# ─────────────────────────────────────────
+# MODS / MUTATORS
+# ─────────────────────────────────────────
+# SS_MODS           = liste d'IDs Mod.io séparés par virgules (ex: "1141916,1234567")
+# SS_MUTATORS       = liste de noms séparés par virgules (ex: "AiModifier,HeadshotOnly")
+# SS_MUTATOR_URL_ARGS = arguments avancés à mettre dans l’URL (ex: "AIModifier.MaxCount=30?AIModifier.Accuracy=0.8")
+: "${SS_MODS:=}"
+: "${SS_MUTATORS:=}"
+: "${SS_MUTATOR_URL_ARGS:=}"           # clés/valeurs de mutators passées en URL
+: "${EXTRA_SERVER_ARGS:=}"             # args supplémentaires raw
 
 echo "▶️ Starting Insurgency Sandstorm Dedicated Server...
 
@@ -135,7 +146,19 @@ else
 fi
 
 # ─────────────────────────────────────────
-# Game.ini (VERSUS)
+# Déduction section de mode (fallback propre)
+# ─────────────────────────────────────────
+MODE_UPPER="$(echo "${SS_GAME_MODE}" | tr '[:lower:]' '[:upper:]')"
+case "${MODE_UPPER}" in
+  PUSH)       MODE_SECTION="/Script/Insurgency.INSPushGameMode" ;;
+  FIREFIGHT)  MODE_SECTION="/Script/Insurgency.INSFirefightGameMode" ;;
+  SKIRMISH)   MODE_SECTION="/Script/Insurgency.INSSkirmishGameMode" ;;
+  DOMINATION) MODE_SECTION="/Script/Insurgency.INSDominationGameMode" ;;
+  *)          MODE_SECTION="/Script/Insurgency.INSPushGameMode" ; SS_GAME_MODE="Push" ;;
+esac
+
+# ─────────────────────────────────────────
+# Game.ini (core + stats + mods/mutators)
 # ─────────────────────────────────────────
 echo "🧩 Writing Game.ini..."
 MODE_UPPER="$(echo "${SS_GAME_MODE}" | tr '[:lower:]' '[:upper:]')"
@@ -147,7 +170,8 @@ case "${MODE_UPPER}" in
   *)          MODE_SECTION="/Script/Insurgency.INSPushGameMode" ; SS_GAME_MODE="Push" ;;
 esac
 
-cat > "${GAMEINI}" <<EOF
+{
+  cat <<EOF
 ; ------------------------------------------------------------------
 ; Insurgency Sandstorm - Game.ini (VERSUS / PvP)
 ; ------------------------------------------------------------------
@@ -161,19 +185,42 @@ RoundTime=${SS_ROUND_TIME}
 PostRoundTime=${SS_POST_ROUND_TIME}
 bAllowVoting=${SS_VOTE_ENABLED}
 RequiredVotePercentage=${SS_VOTE_PERCENT}
+bDisableStats=$([ "${SS_ENABLE_STATS:-1}" = "1" ] && echo "False" || echo "True")
+EOF
+
+  # Mods= (un par ligne)
+  if [ -n "${SS_MODS:-}" ]; then
+    IFS=',' read -ra _mods <<< "${SS_MODS}"
+    for mid in "${_mods[@]}"; do
+      mid_trim="$(echo "$mid" | xargs)"
+      [ -n "$mid_trim" ] && echo "Mods=${mid_trim}"
+    done
+  fi
+
+  # Mutators= (peut rester sur une seule ligne)
+  if [ -n "${SS_MUTATORS:-}" ]; then
+    echo "Mutators=${SS_MUTATORS}"
+  fi
+
+  cat <<EOF
 
 ${MODE_SECTION}
 bBots=${SS_BOTS_ENABLED}
 NumBots=${SS_BOT_NUM}
 BotQuota=${SS_BOT_QUOTA}
 BotDifficulty=${SS_BOT_DIFFICULTY}
+
+[/Script/Insurgency.INSMultiplayerMode]
+bAutoBalanceTeams=${SS_AUTO_BALANCE}
+AutoBalanceDelay=${SS_AUTO_BALANCE_DELAY}
 EOF
+} > "${GAMEINI}"
 echo "   → Game.ini écrit (${SS_GAME_MODE})"
 
+
 # ─────────────────────────────────────────
-# Déduction de l'asset à partir du SCENARIO (anti-range)
+# Déduction Asset depuis SCENARIO (anti-range)
 # ─────────────────────────────────────────
-# --- Déduire MODE + ASSET depuis SS_SCENARIO
 scenario_core="$(printf '%s' "${SS_SCENARIO#Scenario_}" | cut -d'_' -f1)"
 scenario_mode="$(printf '%s' "${SS_SCENARIO}" | awk -F'_' '{print $(NF-1)}' | tr '[:lower:]' '[:upper:]')"
 
@@ -194,43 +241,38 @@ case "${scenario_mode}" in
 esac
 echo "🧭 Scenario=${SS_SCENARIO} → Asset=${MAP_ASSET} | MODE=${scenario_mode}"
 
-# --- Réécrire le Game.ini avec la bonne section (selon scenario_mode)
-cat > "${GAMEINI}" <<EOF
-[/Script/Insurgency.INSGameMode]
-bKillFeed=${SS_KILL_FEED}
-bKillCamera=${SS_KILL_CAMERA}
-bVoiceEnabled=${SS_VOICE_ENABLED}
-FriendlyFireDamageScale=${SS_FRIENDLY_FIRE_SCALE}
-RoundTime=${SS_ROUND_TIME}
-PostRoundTime=${SS_POST_ROUND_TIME}
-bAllowVoting=${SS_VOTE_ENABLED}
-RequiredVotePercentage=${SS_VOTE_PERCENT}
-
-${MODE_SECTION}
-bBots=${SS_BOTS_ENABLED}
-NumBots=${SS_BOT_NUM}
-BotQuota=${SS_BOT_QUOTA}
-BotDifficulty=${SS_BOT_DIFFICULTY}
-EOF
-echo "   → Game.ini écrit (${scenario_mode})"
-
 # ─────────────────────────────────────────
-# MultiplayerMode (désactivation auto-balance si demandé)
+# Construction URL de lancement
 # ─────────────────────────────────────────
-cat >> "${GAMEINI}" <<EOF
-
-[/Script/Insurgency.INSMultiplayerMode]
-bAutoBalanceTeams=${SS_AUTO_BALANCE}
-AutoBalanceDelay=${SS_AUTO_BALANCE_DELAY}
-EOF
-echo "   → Section INSMultiplayerMode écrite (bAutoBalanceTeams=${SS_AUTO_BALANCE})"
-
-# --- Lancement (asset + scénario + bots forcés dans l’URL)
-cd "${GAMEDIR}/Insurgency/Binaries/Linux"
 LAUNCH_URL="${MAP_ASSET}?Scenario=${SS_SCENARIO}?MaxPlayers=${SS_MAXPLAYERS}\
 ?bBots=${SS_BOTS_ENABLED}?NumBots=${SS_BOT_NUM}?BotQuota=${SS_BOT_QUOTA}?BotDifficulty=${SS_BOT_DIFFICULTY}"
+
+# Mutators dans l’URL (en plus de Game.ini, pour forcer le chargement)
+# Mutators dans l’URL (double sécurité)
+if [ -n "${SS_MUTATORS:-}" ]; then
+  LAUNCH_URL="${LAUNCH_URL}?Mutators=${SS_MUTATORS}"
+fi
+if [ -n "${SS_MUTATOR_URL_ARGS:-}" ]; then
+  LAUNCH_URL="${LAUNCH_URL}?${SS_MUTATOR_URL_ARGS}"
+fi
+
+
+# Arguments URL supplémentaires pour mutators (clé=valeur reliées par '?')
+# ex: SS_MUTATOR_URL_ARGS="AIModifier.MaxCount=30?AIModifier.Accuracy=0.8"
+if [ -n "${SS_MUTATOR_URL_ARGS}" ]; then
+  # s’assure de préfixer par '?' si besoin
+  if [[ "${LAUNCH_URL}" != *"?"* ]]; then
+    LAUNCH_URL="${LAUNCH_URL}?${SS_MUTATOR_URL_ARGS}"
+  else
+    LAUNCH_URL="${LAUNCH_URL}?${SS_MUTATOR_URL_ARGS}"
+  fi
+fi
+
 echo "▶️  Launch: ${LAUNCH_URL}"
 
+# ─────────────────────────────────────────
+# XP flags (conditions officielles)
+# ─────────────────────────────────────────
 XP_ARGS=()
 if [ -n "${GSLT_TOKEN}" ] && [ -n "${GAMESTATS_TOKEN}" ] && [ -z "${RCON_PASSWORD}" ]; then
   XP_ARGS+=( "-GSLTToken=${GSLT_TOKEN}" "-GameStatsToken=${GAMESTATS_TOKEN}" )
@@ -239,10 +281,15 @@ else
   echo "ℹ️ XP non activé (tokens manquants ou RCON défini)."
 fi
 
+# ─────────────────────────────────────────
+# Lancement
+# ─────────────────────────────────────────
+cd "${GAMEDIR}/Insurgency/Binaries/Linux"
 exec ./InsurgencyServer-Linux-Shipping \
   "${LAUNCH_URL}" \
   -hostname="${SS_HOSTNAME}" \
   -Port="${PORT}" -QueryPort="${QUERYPORT}" -BeaconPort="${BEACONPORT}" \
   -Rcon ${RCON_PASSWORD:+-RconPassword="${RCON_PASSWORD}"} \
   -log \
+  ${EXTRA_SERVER_ARGS} \
   "${XP_ARGS[@]}"
