@@ -577,6 +577,18 @@ EOF
 } > "${GAMEINI}"
 echo "   → ${GAMEINI} written."
 
+# Append des clés spécifiques Coop sous la même section
+if [[ "${RULES_SECTION}" == "/Script/Insurgency.INSCoopMode" ]]; then
+  {
+    echo "FriendlyBotQuota=${SS_FRIENDLY_BOT_QUOTA:-0}"
+    [[ -n "${SS_MIN_ENEMIES:-}" ]] && echo "MinimumEnemies=${SS_MIN_ENEMIES}"
+    [[ -n "${SS_MAX_ENEMIES:-}" ]] && echo "MaximumEnemies=${SS_MAX_ENEMIES}"
+  } >> "${GAMEINI}"
+  echo "   → Coop extras: FriendlyBotQuota=${SS_FRIENDLY_BOT_QUOTA:-0}, " \
+       "MinEnemies=${SS_MIN_ENEMIES:-<unset>}, MaxEnemies=${SS_MAX_ENEMIES:-<unset>}"
+fi
+
+
 # ─────────────────────────────────────────
 # 9) Construction de l’URL de lancement
 # ─────────────────────────────────────────
