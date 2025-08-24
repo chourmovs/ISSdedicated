@@ -553,6 +553,7 @@ RequiredVotePercentage=${SS_VOTE_PERCENT}
 bDisableStats=$([ "${SS_ENABLE_STATS}" = "1" ] && echo "False" || echo "True")
 EOF
 
+  # Mods / Mutators dans INSGameMode
   if [ -n "${SS_MODS}" ]; then
     IFS=',' read -ra _mods <<< "${SS_MODS}"
     for mid in "${_mods[@]}"; do
@@ -564,13 +565,13 @@ EOF
 
   cat <<EOF
 
-${MODE_SECTION}
+[${MODE_SECTION}]
 bBots=${SS_BOTS_ENABLED}
 NumBots=${SS_BOT_NUM}
 BotQuota=${SS_BOT_QUOTA}
 BotDifficulty=${SS_BOT_DIFFICULTY}
 
-${RULES_SECTION}
+[${RULES_SECTION}]
 bAutoBalanceTeams=${SS_AUTO_BALANCE}
 AutoBalanceDelay=${SS_AUTO_BALANCE_DELAY}
 EOF
@@ -584,9 +585,9 @@ if [[ "${RULES_SECTION}" == "/Script/Insurgency.INSCoopMode" ]]; then
     [[ -n "${SS_MIN_ENEMIES:-}" ]] && echo "MinimumEnemies=${SS_MIN_ENEMIES}"
     [[ -n "${SS_MAX_ENEMIES:-}" ]] && echo "MaximumEnemies=${SS_MAX_ENEMIES}"
   } >> "${GAMEINI}"
-  echo "   → Coop extras: FriendlyBotQuota=${SS_FRIENDLY_BOT_QUOTA:-0}, " \
-       "MinEnemies=${SS_MIN_ENEMIES:-<unset>}, MaxEnemies=${SS_MAX_ENEMIES:-<unset>}"
+  echo "   → Coop extras: FriendlyBotQuota=${SS_FRIENDLY_BOT_QUOTA:-0}, MinEnemies=${SS_MIN_ENEMIES:-<unset>}, MaxEnemies=${SS_MAX_ENEMIES:-<unset>}"
 fi
+
 
 
 # ─────────────────────────────────────────
