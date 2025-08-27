@@ -608,6 +608,30 @@ export AIMOD_OVERWRITE_BOTCFG=True AIMOD_ALLOW_MELEE=0 AIMOD_ATTACK_DELAY_MELEE=
 export AIMOD_CHANCE_COVER=0.99 AIMOD_CHANCE_COVER_IMPRO=0.90 AIMOD_CHANCE_COVER_FAR=0.92 AIMOD_STAY_IN_SQUADS=1 AIMOD_SQUAD_SIZE=5
 export AIMOD_SIGHT_SMOKE=1400.0 AIMOD_SIGHT_SMOKE_EYE=700.0 AIMOD_SIGHT_SMOKE_EYE_FRAC=0.70 AIMOD_TIME_NOTICE_VISIB_MULT=0.6
 
+# Verrou "No-Melee + Sneaky" en INI (en plus des URL) pour éviter une URL trop longue
+if [ "${AIMOD_WRITE_INI_CRITICAL:-1}" = "1" ]; then
+  {
+    echo
+    echo "[/AIModifier/Mutators/AIModifier.AIModifier_C]"
+    echo "AllowMelee=false"
+    echo "AttackDelayMelee=10.0"
+    echo "MeleeRange=50.0"
+    echo "CloseRange=250.0"
+    echo "Chance2Rush=0.00"
+    echo "Chance2ForceHunt=0.00"
+    echo "Chance2Cover=0.995"
+    echo "Chance2ImprovisedCover=0.95"
+    echo "Chance2CoverFar=0.95"
+    echo "MaxDistance2Cover=8000"
+    echo "Chance2Wander=0.05"
+    echo "DefaultWanderDistance=1200.0"
+    echo "WanderDistanceMaxMultiplier=0.8"
+    echo "minTime2StopFiringNLOS=1.5"
+    echo "maxTime2StopFiringNLOS=3.0"
+  } >> "${GAMEINI}"
+  echo "   → AiModifier (anti-melee + sneaky) écrit en INI."
+fi
+
 
 # ─────────────────────────────────────────
 # 9) Construction de l’URL de lancement
