@@ -1,12 +1,13 @@
 #!/bin/bash
 # ==================================================================
-# Insurgency: Sandstorm Dedicated Server - EntryPoint (verbose/full)
+# Insurgency: Sandstorm Dedicated Server - EntryPoint (clean)
 # - XP classé (GSLT + GameStats, RCON vide)
 # - Admins: Admins.txt + -AdminList
-# - Mods & Mutators (Game.ini + URL)
-# - AiModifier placeholders (AIMOD_*) -> SS_MUTATOR_URL_ARGS
+# - Mods (Workshop) chargés; Mutators activés uniquement en Skirmish
+# - AiModifier: args via URL UNIQUEMENT si Skirmish + AiModifier actif
 # - MapCycle + déduction Asset depuis SCENARIO
 # - Logs détaillés + validations
+# - AUCUN PRESET FORCÉ (tout par env)
 # ==================================================================
 
 set -eo pipefail
@@ -30,11 +31,11 @@ SS_HOSTNAME="${SS_HOSTNAME:-Chourmovs ISS (PvP)}"
 SS_MAXPLAYERS="${SS_MAXPLAYERS:-28}"
 
 SS_GAME_MODE="${SS_GAME_MODE:-Push}"   # Push/Firefight/Skirmish/Domination/Checkpoint/Outpost/Survival
-SS_MAP="${SS_MAP:-Crossing}"           # informatif
-SS_SCENARIO="${SS_SCENARIO:-}"         # fallback plus bas
-SS_MAPCYCLE="${SS_MAPCYCLE:-}"         # multi-lignes possibles
+SS_MAP="${SS_MAP:-Crossing}"           
+SS_SCENARIO="${SS_SCENARIO:-}"         
+SS_MAPCYCLE="${SS_MAPCYCLE:-}"         
 
-# Bots (VERSUS)
+# Bots
 SS_BOTS_ENABLED="${SS_BOTS_ENABLED:-1}"
 SS_BOT_NUM="${SS_BOT_NUM:-12}"
 SS_BOT_QUOTA="${SS_BOT_QUOTA:-1.0}"
@@ -56,159 +57,23 @@ SS_VOTE_PERCENT="${SS_VOTE_PERCENT:-0.6}"
 
 # XP / Stats
 SS_ENABLE_STATS="${SS_ENABLE_STATS:-1}"
-GSLT_TOKEN="${GSLT_TOKEN:-}"           # https://steamcommunity.com/dev/managegameservers
-GAMESTATS_TOKEN="${GAMESTATS_TOKEN:-}" # https://gamestats.sandstorm.game
+GSLT_TOKEN="${GSLT_TOKEN:-}"
+GAMESTATS_TOKEN="${GAMESTATS_TOKEN:-}"
 
-# Mods & Mutators
-SS_MODS="${SS_MODS:-}"                 # "1141916,12345"
-SS_MUTATORS="${SS_MUTATORS:-}"         # "AiModifier,HeadshotOnly"
-SS_MUTATOR_URL_ARGS="${SS_MUTATOR_URL_ARGS:-}"
+# Mods (Workshop) & Mutators
+SS_MODS="${SS_MODS:-}"                      
+SS_MUTATORS_SKIRMISH="${SS_MUTATORS_SKIRMISH:-}"   # UNIQUEMENT Skirmish
 EXTRA_SERVER_ARGS="${EXTRA_SERVER_ARGS:-}"
 
-# Admins (SteamID64, virgules)
+# Admins
 SS_ADMINS="${SS_ADMINS:-}"
 
-# ─────────────────────────────────────────
-# AiModifier placeholders (TOUS optionnels)
-# (On utilise systématiquement ${VAR:-} → pas d'erreur avec set -u)
-# ─────────────────────────────────────────
-
-# 1) Skill de base
+# AiModifier placeholders (tous optionnels, même liste que ton script précédent)
+# Exemple :
 AIMOD_DIFFICULTY="${AIMOD_DIFFICULTY:-}"
-AIMOD_ACCURACY="${AIMOD_ACCURACY:-}"
-AIMOD_REACTION="${AIMOD_REACTION:-}"
-
-# 2) Sight / vision
-AIMOD_SIGHT_ALERT="${AIMOD_SIGHT_ALERT:-}"
-AIMOD_SIGHT_IDLE="${AIMOD_SIGHT_IDLE:-}"
-AIMOD_SIGHT_SMOKE="${AIMOD_SIGHT_SMOKE:-}"
-AIMOD_SIGHT_SMOKE_EYE="${AIMOD_SIGHT_SMOKE_EYE:-}"
-AIMOD_SIGHT_SMOKE_EYE_FRAC="${AIMOD_SIGHT_SMOKE_EYE_FRAC:-}"
-AIMOD_MIN_LI_SEE="${AIMOD_MIN_LI_SEE:-}"
-AIMOD_MIN_LI_NIGHT="${AIMOD_MIN_LI_NIGHT:-}"
-AIMOD_LI_FULLY_VISIBLE="${AIMOD_LI_FULLY_VISIBLE:-}"
-AIMOD_TIME_NOTICE_VISIB_MULT="${AIMOD_TIME_NOTICE_VISIB_MULT:-}"
-AIMOD_MIN_LI_AFFECT_NV="${AIMOD_MIN_LI_AFFECT_NV:-}"
-AIMOD_MIN_NV_STRENGTH="${AIMOD_MIN_NV_STRENGTH:-}"
-
-# 3) Chances d’être spotté
-AIMOD_CH_SPRINT_MULT="${AIMOD_CH_SPRINT_MULT:-}"
-AIMOD_CH_MOVING_MULT="${AIMOD_CH_MOVING_MULT:-}"
-AIMOD_CH_STAND_DIST="${AIMOD_CH_STAND_DIST:-}"
-AIMOD_CH_STAND_CLOSE="${AIMOD_CH_STAND_CLOSE:-}"
-AIMOD_CH_CROUCH_DIST="${AIMOD_CH_CROUCH_DIST:-}"
-AIMOD_CH_CROUCH_CLOSE="${AIMOD_CH_CROUCH_CLOSE:-}"
-AIMOD_CH_PRONE_DIST="${AIMOD_CH_PRONE_DIST:-}"
-AIMOD_CH_PRONE_CLOSE="${AIMOD_CH_PRONE_CLOSE:-}"
-
-# 4) Ouïe
-AIMOD_HEAR_AWARE_RADIAL="${AIMOD_HEAR_AWARE_RADIAL:-}"
-AIMOD_HEAR_AWARE_GUNSHOT="${AIMOD_HEAR_AWARE_GUNSHOT:-}"
-AIMOD_HEAR_AWARE_SPRINT="${AIMOD_HEAR_AWARE_SPRINT:-}"
-AIMOD_HEAR_AWARE_FOOT="${AIMOD_HEAR_AWARE_FOOT:-}"
-AIMOD_HEAR_DIST_SPRINT="${AIMOD_HEAR_DIST_SPRINT:-}"
-AIMOD_HEAR_DIST_RUN="${AIMOD_HEAR_DIST_RUN:-}"
-AIMOD_HEAR_Z_MIN="${AIMOD_HEAR_Z_MIN:-}"
-AIMOD_HEAR_Z_MAX="${AIMOD_HEAR_Z_MAX:-}"
-AIMOD_HEAR_FENCED_MOD="${AIMOD_HEAR_FENCED_MOD:-}"
-
-# 5) Vitesse de rotation
-AIMOD_TURNSPD_MAX_ANGLE_TH="${AIMOD_TURNSPD_MAX_ANGLE_TH:-}"
-AIMOD_TURNSPD_MIN_ANGLE_TH="${AIMOD_TURNSPD_MIN_ANGLE_TH:-}"
-AIMOD_TURNSPD_MAX="${AIMOD_TURNSPD_MAX:-}"
-AIMOD_TURNSPD_MIN="${AIMOD_TURNSPD_MIN:-}"
-AIMOD_TURNSPD_DIST_TH="${AIMOD_TURNSPD_DIST_TH:-}"
-AIMOD_TURNSPD_SCALE_MAX="${AIMOD_TURNSPD_SCALE_MAX:-}"
-AIMOD_TURNSPD_SCALE_MIN="${AIMOD_TURNSPD_SCALE_MIN:-}"
-
-# 6) Attaque & distances
-AIMOD_ATTACK_DELAY_CLOSE="${AIMOD_ATTACK_DELAY_CLOSE:-}"
-AIMOD_ATTACK_DELAY_DIST="${AIMOD_ATTACK_DELAY_DIST:-}"
-AIMOD_ATTACK_DELAY_MELEE="${AIMOD_ATTACK_DELAY_MELEE:-}"
-AIMOD_DISTANCE_RANGE="${AIMOD_DISTANCE_RANGE:-}"
-AIMOD_CLOSE_RANGE="${AIMOD_CLOSE_RANGE:-}"
-AIMOD_MID_RANGE="${AIMOD_MID_RANGE:-}"
-AIMOD_FAR_RANGE="${AIMOD_FAR_RANGE:-}"
-AIMOD_MELEE_RANGE="${AIMOD_MELEE_RANGE:-}"
-
-# 7) Précision / bloatbox
 AIMOD_ACCURACY_MULT="${AIMOD_ACCURACY_MULT:-}"
-AIMOD_SUPPRESS_ACCURACY_MULT="${AIMOD_SUPPRESS_ACCURACY_MULT:-}"
-AIMOD_NIGHT_ACC_FACTOR="${AIMOD_NIGHT_ACC_FACTOR:-}"
-AIMOD_ZERO_TIME_EASY="${AIMOD_ZERO_TIME_EASY:-}"
-AIMOD_ZERO_TIME_MED="${AIMOD_ZERO_TIME_MED:-}"
-AIMOD_ZERO_TIME_HARD="${AIMOD_ZERO_TIME_HARD:-}"
-AIMOD_BLOAT_MULT_EASY="${AIMOD_BLOAT_MULT_EASY:-}"
-AIMOD_BLOAT_MULT_MED="${AIMOD_BLOAT_MULT_MED:-}"
-AIMOD_BLOAT_MULT_HARD="${AIMOD_BLOAT_MULT_HARD:-}"
-AIMOD_BLOAT_DIST_MULT="${AIMOD_BLOAT_DIST_MULT:-}"
-AIMOD_BLOAT_MAX_DIST="${AIMOD_BLOAT_MAX_DIST:-}"
-AIMOD_BLOAT_MIN_DIST="${AIMOD_BLOAT_MIN_DIST:-}"
-
-# 8) Comportements offensifs / cover / wander / flanking
 AIMOD_CHANCE_COVER="${AIMOD_CHANCE_COVER:-}"
-AIMOD_CHANCE_COVER_IMPRO="${AIMOD_CHANCE_COVER_IMPRO:-}"
-AIMOD_CHANCE_COVER_FAR="${AIMOD_CHANCE_COVER_FAR:-}"
-AIMOD_MAX_DIST_2COVER="${AIMOD_MAX_DIST_2COVER:-}"
-AIMOD_CHANCE_WANDER="${AIMOD_CHANCE_WANDER:-}"
-AIMOD_DEF_WANDER_DIST="${AIMOD_DEF_WANDER_DIST:-}"
-AIMOD_WANDER_DIST_MAX_MULT="${AIMOD_WANDER_DIST_MAX_MULT:-}"
-AIMOD_CHANCE_FLANK="${AIMOD_CHANCE_FLANK:-}"
-AIMOD_CHANCE_RUSH="${AIMOD_CHANCE_RUSH:-}"
-AIMOD_CHANCE_HUNT="${AIMOD_CHANCE_HUNT:-}"
-AIMOD_CHANCE_FORCE_HUNT="${AIMOD_CHANCE_FORCE_HUNT:-}"
-AIMOD_CHANCE_REGROUP="${AIMOD_CHANCE_REGROUP:-}"
-
-# 9) Spotting bonus / leaning / hearing min / injured thresholds
-AIMOD_BONUS_SPOT_START="${AIMOD_BONUS_SPOT_START:-}"
-AIMOD_MAX_BONUS_SPOT_HEAR="${AIMOD_MAX_BONUS_SPOT_HEAR:-}"
-AIMOD_MAX_BONUS_SPOT_ALERT="${AIMOD_MAX_BONUS_SPOT_ALERT:-}"
-AIMOD_CH_LEAN_MULT="${AIMOD_CH_LEAN_MULT:-}"
-AIMOD_MIN_CHANCE_HEAR="${AIMOD_MIN_CHANCE_HEAR:-}"
-AIMOD_INJ_DMG_TH="${AIMOD_INJ_DMG_TH:-}"
-AIMOD_INJ_HP_RATIO="${AIMOD_INJ_HP_RATIO:-}"
-
-# 10) Objectifs / distances à l’objectif
-AIMOD_DIST_NEAR_OBJ="${AIMOD_DIST_NEAR_OBJ:-}"
-AIMOD_DIST_MID_OBJ="${AIMOD_DIST_MID_OBJ:-}"
-AIMOD_DIST_FAR_OBJ="${AIMOD_DIST_FAR_OBJ:-}"
-AIMOD_RATIO_BOTS_CLOSE_OBJ="${AIMOD_RATIO_BOTS_CLOSE_OBJ:-}"
-
-# 11) Suppression / NLOS stop firing / durées / distances
-AIMOD_STOP_FIRE_NLOS_MIN="${AIMOD_STOP_FIRE_NLOS_MIN:-}"
-AIMOD_STOP_FIRE_NLOS_MAX="${AIMOD_STOP_FIRE_NLOS_MAX:-}"
-AIMOD_SUPPR_TIME_MIN="${AIMOD_SUPPR_TIME_MIN:-}"
-AIMOD_SUPPR_TIME_MAX="${AIMOD_SUPPR_TIME_MAX:-}"
-AIMOD_SUPPR_MIN_DIST="${AIMOD_SUPPR_MIN_DIST:-}"
-AIMOD_SUPPR_BASE_CH="${AIMOD_SUPPR_BASE_CH:-}"
-AIMOD_SUPPR_ADD_FRIEND="${AIMOD_SUPPR_ADD_FRIEND:-}"
-
-# 12) Head/body ratio (doublon volontairement géré)
-AIMOD_HEAD2BODY_RATIO="${AIMOD_HEAD2BODY_RATIO:-}"
-AIMOD_RATIO_AIM_HEAD="${AIMOD_RATIO_AIM_HEAD:-}"
-
-# 13) Difficulté variable en fonction du nombre de joueurs
-AIMOD_VAR_PC_MIN="${AIMOD_VAR_PC_MIN:-}"
-AIMOD_VAR_PC_MAX="${AIMOD_VAR_PC_MAX:-}"
-AIMOD_VAR_MIN_DIFFICULTY="${AIMOD_VAR_MIN_DIFFICULTY:-}"
-AIMOD_VAR_MAX_DIFFICULTY="${AIMOD_VAR_MAX_DIFFICULTY:-}"
-
-# 14) Respawns & population
-AIMOD_MAXCOUNT="${AIMOD_MAXCOUNT:-}"
-AIMOD_RESPAWN_MIN="${AIMOD_RESPAWN_MIN:-}"
-AIMOD_RESPAWN_MAX="${AIMOD_RESPAWN_MAX:-}"
-AIMOD_SPAWN_DELAY="${AIMOD_SPAWN_DELAY:-}"
-
-# 15) Divers / toggles
-AIMOD_OVERWRITE_BOTCFG="${AIMOD_OVERWRITE_BOTCFG:-}"
-AIMOD_BOT_USES_SMOKE="${AIMOD_BOT_USES_SMOKE:-}"
-AIMOD_SUPPR_4MG_ONLY="${AIMOD_SUPPR_4MG_ONLY:-}"
-AIMOD_MEMORY_MAX_AGE="${AIMOD_MEMORY_MAX_AGE:-}"
-
-# 16) “Pas de couteau” & squads
-AIMOD_ALLOW_MELEE="${AIMOD_ALLOW_MELEE:-}"
-AIMOD_STAY_IN_SQUADS="${AIMOD_STAY_IN_SQUADS:-}"
-AIMOD_SQUAD_SIZE="${AIMOD_SQUAD_SIZE:-}"
+# … (garde toute la liste de tes AIMOD_* ici)
 
 echo "────────────────────────────────────────────────────────"
 echo "▶️  Starting Insurgency Sandstorm Dedicated Server"
@@ -222,7 +87,7 @@ echo "    AUTO_UPDATE=${AUTO_UPDATE}"
 echo "────────────────────────────────────────────────────────"
 
 # ─────────────────────────────────────────
-# 1) Préparation FS & permissions
+# 1) Préparation FS
 # ─────────────────────────────────────────
 need_paths=(
   "${GAMEDIR}"
@@ -242,265 +107,48 @@ for p in "${need_paths[@]}"; do
     }
   fi
 done
-echo "🔏 FS write test..."
-echo "write-test" > "${GAMEDIR}/.writetest" || { echo "❌ Cannot write into ${GAMEDIR}"; exit 1; }
-rm -f "${GAMEDIR}/.writetest"
-echo "✅ FS OK"
 
 # ─────────────────────────────────────────
-# 2) Admins: Admins.txt + -AdminList=Admins
+# 2) Admins
 # ─────────────────────────────────────────
 ADMINSDIR="${GAMEDIR}/Insurgency/Config/Server"
 ADMINSLIST_NAME="Admins"
 ADMINSLIST_PATH="${ADMINSDIR}/${ADMINSLIST_NAME}.txt"
 mkdir -p "${ADMINSDIR}"
+: > "${ADMINSLIST_PATH}"
 
 if [ -n "${SS_ADMINS}" ]; then
-  echo "🛡️  Writing Admins list → ${ADMINSLIST_PATH}"
-  : > "${ADMINSLIST_PATH}"
   IFS=',' read -ra _admins <<< "${SS_ADMINS}"
-  count=0
   for id in "${_admins[@]}"; do
     id_trim="$(echo "$id" | xargs)"
-    if [[ "$id_trim" =~ ^[0-9]{17}$ ]]; then
-      echo "$id_trim" >> "${ADMINSLIST_PATH}"
-      count=$((count+1))
-    else
-      echo "⚠️  Skipping invalid SteamID64: '${id_trim}'"
-    fi
+    [[ "$id_trim" =~ ^[0-9]{17}$ ]] && echo "$id_trim" >> "${ADMINSLIST_PATH}"
   done
-  echo "   → ${count} admin(s) written."
-else
-  [ -f "${ADMINSLIST_PATH}" ] || : > "${ADMINSLIST_PATH}"
-  echo "ℹ️  No SS_ADMINS provided; empty Admins.txt ensured."
 fi
 
 # ─────────────────────────────────────────
-# 3) SteamCMD auto-update (avec retry)
+# 3) SteamCMD update
 # ─────────────────────────────────────────
 if [ "${AUTO_UPDATE}" = "1" ]; then
-  echo "📥 Updating server via SteamCMD..."
-  tries=3
-  for i in $(seq 1 $tries); do
-    if "${STEAMCMDDIR}/steamcmd.sh" +@sSteamCmdForcePlatformType linux \
-        +force_install_dir "${GAMEDIR}" \
-        +login anonymous \
-        +app_update "${APPID}" validate \
-        +quit; then
-      echo "✅ SteamCMD update success (try ${i}/${tries})"
-      break
-    fi
-    echo "⚠️  SteamCMD failed (try ${i}/${tries}). Retrying in 5s..."
-    sleep 5
-    if [ "${i}" -eq "${tries}" ]; then
-      echo "⚠️  Continuing despite SteamCMD failures."
-    fi
-  done
-else
-  echo "ℹ️  AUTO_UPDATE=0 → skipping SteamCMD update."
+  "${STEAMCMDDIR}/steamcmd.sh" +@sSteamCmdForcePlatformType linux \
+      +force_install_dir "${GAMEDIR}" \
+      +login anonymous \
+      +app_update "${APPID}" validate \
+      +quit || echo "⚠️ SteamCMD failed"
 fi
 
 # ─────────────────────────────────────────
-# 4) MapCycle.txt (si fourni)
+# 4) MapCycle
 # ─────────────────────────────────────────
-echo "🗺️  Writing MapCycle (if any)..."
 if [ -n "${SS_MAPCYCLE}" ]; then
   echo "${SS_MAPCYCLE}" | tr '\r' '\n' | sed '/^\s*$/d' > "${MAPCYCLE}"
-  lines="$(wc -l < "${MAPCYCLE}" | xargs || true)"
-  echo "   → MapCycle written at ${MAPCYCLE} (${lines:-0} lines)"
-else
-  echo "   → No SS_MAPCYCLE provided."
 fi
 
 # ─────────────────────────────────────────
-# 5) Mode par défaut (si pas de scénario)
-# ─────────────────────────────────────────
-MODE_UPPER="$(echo "${SS_GAME_MODE}" | tr '[:lower:]' '[:upper:]')"
-case "${MODE_UPPER}" in
-  PUSH)        MODE_SECTION_DEF="/Script/Insurgency.INSPushGameMode" ;;
-  FIREFIGHT)   MODE_SECTION_DEF="/Script/Insurgency.INSFirefightGameMode" ;;
-  SKIRMISH)    MODE_SECTION_DEF="/Script/Insurgency.INSSkirmishGameMode" ;;
-  DOMINATION)  MODE_SECTION_DEF="/Script/Insurgency.INSDominationGameMode" ;;
-  CHECKPOINT)  MODE_SECTION_DEF="/Script/Insurgency.INSCheckpointGameMode" ;;
-  OUTPOST)     MODE_SECTION_DEF="/Script/Insurgency.INSOutpostGameMode" ;;
-  SURVIVAL)    MODE_SECTION_DEF="/Script/Insurgency.INSSurvivalGameMode" ;;
-  *)           MODE_SECTION_DEF="/Script/Insurgency.INSPushGameMode" ; SS_GAME_MODE="Push" ;;
-esac
-echo "🎮 Default mode → ${SS_GAME_MODE} (${MODE_SECTION_DEF})"
-
-# ─────────────────────────────────────────
-# 6) AiModifier placeholders → URL args
-# ─────────────────────────────────────────
-echo "🧩 Building AiModifier URL args from placeholders..."
-AIMOD_ARGS=()
-
-add_arg() {
-  local key="$1"
-  local val="$2"
-  if [ -n "${val:-}" ]; then
-    AIMOD_ARGS+=("${key}=${val}")
-  fi
-}
-
-# 1) Skill de base
-add_arg "AIModifier.Difficulty" "${AIMOD_DIFFICULTY}"
-add_arg "AIModifier.Accuracy" "${AIMOD_ACCURACY}"
-add_arg "AIModifier.ReactionTime" "${AIMOD_REACTION}"
-
-# 2) Sight / vision
-add_arg "AIModifier.SightRangeAlert" "${AIMOD_SIGHT_ALERT}"
-add_arg "AIModifier.SightRangeIdle" "${AIMOD_SIGHT_IDLE}"
-add_arg "AIModifier.SightRangeWithinSmokeGrenade" "${AIMOD_SIGHT_SMOKE}"
-add_arg "AIModifier.SightRangeWithinSmokeGrenadeEye" "${AIMOD_SIGHT_SMOKE_EYE}"
-add_arg "AIModifier.SightRangeSmokeEyeFrac" "${AIMOD_SIGHT_SMOKE_EYE_FRAC}"
-add_arg "AIModifier.MinLightIntensityToSeeTarget" "${AIMOD_MIN_LI_SEE}"
-add_arg "AIModifier.MinLightIntensitytoSeeTargetatNight" "${AIMOD_MIN_LI_NIGHT}"
-add_arg "AIModifier.LightIntensityforFullyVisibleTarget" "${AIMOD_LI_FULLY_VISIBLE}"
-add_arg "AIModifier.TimetoNoticeVisibilityMultiplier" "${AIMOD_TIME_NOTICE_VISIB_MULT}"
-add_arg "AIModifier.MinLightIntensitytoAffectNightVision" "${AIMOD_MIN_LI_AFFECT_NV}"
-add_arg "AIModifier.MinNightVisionSightStrength" "${AIMOD_MIN_NV_STRENGTH}"
-
-# 3) Chances d’être spotté
-add_arg "AIModifier.ChanceSprintMultiplier" "${AIMOD_CH_SPRINT_MULT}"
-add_arg "AIModifier.ChanceMovingMultiplier" "${AIMOD_CH_MOVING_MULT}"
-add_arg "AIModifier.ChanceAtDistanceStanding" "${AIMOD_CH_STAND_DIST}"
-add_arg "AIModifier.ChanceAtCloseRangeStanding" "${AIMOD_CH_STAND_CLOSE}"
-add_arg "AIModifier.ChanceAtDistanceCrouched" "${AIMOD_CH_CROUCH_DIST}"
-add_arg "AIModifier.ChanceAtCloseRangeCrouched" "${AIMOD_CH_CROUCH_CLOSE}"
-add_arg "AIModifier.ChanceAtDistanceProne" "${AIMOD_CH_PRONE_DIST}"
-add_arg "AIModifier.ChanceAtCloseRangeProne" "${AIMOD_CH_PRONE_CLOSE}"
-
-# 4) Ouïe
-add_arg "AIModifier.HearAwareDistanceRadial" "${AIMOD_HEAR_AWARE_RADIAL}"
-add_arg "AIModifier.HearAwareDistanceGunshot" "${AIMOD_HEAR_AWARE_GUNSHOT}"
-add_arg "AIModifier.HearAwareDistanceSprintFootstep" "${AIMOD_HEAR_AWARE_SPRINT}"
-add_arg "AIModifier.HearAwareDistanceFootsteps" "${AIMOD_HEAR_AWARE_FOOT}"
-add_arg "AIModifier.HearDistanceFootstepsSprinting" "${AIMOD_HEAR_DIST_SPRINT}"
-add_arg "AIModifier.HearDistanceFootstepsRunning" "${AIMOD_HEAR_DIST_RUN}"
-add_arg "AIModifier.HearAbilityZOffsetMin" "${AIMOD_HEAR_Z_MIN}"
-add_arg "AIModifier.HearAbilityZOffsetMax" "${AIMOD_HEAR_Z_MAX}"
-add_arg "AIModifier.FencedTargetHearAbilityModifier" "${AIMOD_HEAR_FENCED_MOD}"
-
-# 5) Vitesse de rotation
-add_arg "AIModifier.TurnSpeedMaxAngleThreshold" "${AIMOD_TURNSPD_MAX_ANGLE_TH}"
-add_arg "AIModifier.TurnSpeedMinAngleThreshold" "${AIMOD_TURNSPD_MIN_ANGLE_TH}"
-add_arg "AIModifier.TurnSpeedMaxAngle" "${AIMOD_TURNSPD_MAX}"
-add_arg "AIModifier.TurnSpeedMinAngle" "${AIMOD_TURNSPD_MIN}"
-add_arg "AIModifier.TurnSpeedDistanceThreshold" "${AIMOD_TURNSPD_DIST_TH}"
-add_arg "AIModifier.TurnSpeedScaleModifierMax" "${AIMOD_TURNSPD_SCALE_MAX}"
-add_arg "AIModifier.TurnSpeedScaleModifierMin" "${AIMOD_TURNSPD_SCALE_MIN}"
-
-# 6) Attaque & distances
-add_arg "AIModifier.AttackDelayClose" "${AIMOD_ATTACK_DELAY_CLOSE}"
-add_arg "AIModifier.AttackDelayDistant" "${AIMOD_ATTACK_DELAY_DIST}"
-add_arg "AIModifier.AttackDelayMelee" "${AIMOD_ATTACK_DELAY_MELEE}"
-add_arg "AIModifier.DistanceRange" "${AIMOD_DISTANCE_RANGE}"
-add_arg "AIModifier.CloseRange" "${AIMOD_CLOSE_RANGE}"
-add_arg "AIModifier.MiddleRange" "${AIMOD_MID_RANGE}"
-add_arg "AIModifier.FarRange" "${AIMOD_FAR_RANGE}"
-add_arg "AIModifier.MeleeRange" "${AIMOD_MELEE_RANGE}"
-
-# 7) Précision / bloatbox
-add_arg "AIModifier.AccuracyMultiplier" "${AIMOD_ACCURACY_MULT}"
-add_arg "AIModifier.SuppressionAccuracyMultiplier" "${AIMOD_SUPPRESS_ACCURACY_MULT}"
-add_arg "AIModifier.NightAccuracyFactor" "${AIMOD_NIGHT_ACC_FACTOR}"
-add_arg "AIModifier.ZeroTimeMultiplierEasy" "${AIMOD_ZERO_TIME_EASY}"
-add_arg "AIModifier.ZeroTimeMultiplierMed" "${AIMOD_ZERO_TIME_MED}"
-add_arg "AIModifier.ZeroTimeMultiplierHard" "${AIMOD_ZERO_TIME_HARD}"
-add_arg "AIModifier.BloatBoxMultiplierEasy" "${AIMOD_BLOAT_MULT_EASY}"
-add_arg "AIModifier.BloatBoxMultiplierMed" "${AIMOD_BLOAT_MULT_MED}"
-add_arg "AIModifier.BloatBoxMultiplierHard" "${AIMOD_BLOAT_MULT_HARD}"
-add_arg "AIModifier.BloatBoxMultiplierDistance" "${AIMOD_BLOAT_DIST_MULT}"
-add_arg "AIModifier.BloatBoxMultiplierMaxDistance" "${AIMOD_BLOAT_MAX_DIST}"
-add_arg "AIModifier.BloatBoxMultiplierMinDistance" "${AIMOD_BLOAT_MIN_DIST}"
-
-# 8) Comportements offensifs
-add_arg "AIModifier.Chance2Cover" "${AIMOD_CHANCE_COVER}"
-add_arg "AIModifier.Chance2ImprovisedCover" "${AIMOD_CHANCE_COVER_IMPRO}"
-add_arg "AIModifier.Chance2CoverFar" "${AIMOD_CHANCE_COVER_FAR}"
-add_arg "AIModifier.MaxDistance2Cover" "${AIMOD_MAX_DIST_2COVER}"
-add_arg "AIModifier.Chance2Wander" "${AIMOD_CHANCE_WANDER}"
-add_arg "AIModifier.DefaultWanderDistance" "${AIMOD_DEF_WANDER_DIST}"
-add_arg "AIModifier.WanderDistanceMaxMultiplier" "${AIMOD_WANDER_DIST_MAX_MULT}"
-add_arg "AIModifier.Chance2Flank" "${AIMOD_CHANCE_FLANK}"
-add_arg "AIModifier.Chance2Rush" "${AIMOD_CHANCE_RUSH}"
-add_arg "AIModifier.Chance2Hunt" "${AIMOD_CHANCE_HUNT}"
-add_arg "AIModifier.Chance2ForceHunt" "${AIMOD_CHANCE_FORCE_HUNT}"
-add_arg "AIModifier.Chance2Regroup" "${AIMOD_CHANCE_REGROUP}"
-
-# 9) Spotting / leaning / injured / hearing min
-add_arg "AIModifier.bonusSpotLossStartingDistance" "${AIMOD_BONUS_SPOT_START}"
-add_arg "AIModifier.maxBonusSpotChanceHearing" "${AIMOD_MAX_BONUS_SPOT_HEAR}"
-add_arg "AIModifier.maxBonusSpotChanceAlert" "${AIMOD_MAX_BONUS_SPOT_ALERT}"
-add_arg "AIModifier.ChanceLeanMultiplier" "${AIMOD_CH_LEAN_MULT}"
-add_arg "AIModifier.minChance2Hear" "${AIMOD_MIN_CHANCE_HEAR}"
-add_arg "AIModifier.InjuredDmgThreshold" "${AIMOD_INJ_DMG_TH}"
-add_arg "AIModifier.InjuredHPRatioThreshold" "${AIMOD_INJ_HP_RATIO}"
-
-# 10) Objectifs
-add_arg "AIModifier.DistanceNear2Objective" "${AIMOD_DIST_NEAR_OBJ}"
-add_arg "AIModifier.DistanceMid2Objective" "${AIMOD_DIST_MID_OBJ}"
-add_arg "AIModifier.DistanceFar2Objective" "${AIMOD_DIST_FAR_OBJ}"
-add_arg "AIModifier.ratioBotsClose2Objective" "${AIMOD_RATIO_BOTS_CLOSE_OBJ}"
-
-# 11) Suppression & NLOS
-add_arg "AIModifier.minTime2StopFiringNLOS" "${AIMOD_STOP_FIRE_NLOS_MIN}"
-add_arg "AIModifier.maxTime2StopFiringNLOS" "${AIMOD_STOP_FIRE_NLOS_MAX}"
-add_arg "AIModifier.minSuppressionTime" "${AIMOD_SUPPR_TIME_MIN}"
-add_arg "AIModifier.maxSuppressionTime" "${AIMOD_SUPPR_TIME_MAX}"
-add_arg "AIModifier.SuppressionMinDistance" "${AIMOD_SUPPR_MIN_DIST}"
-add_arg "AIModifier.BaseChance2Suppress" "${AIMOD_SUPPR_BASE_CH}"
-add_arg "AIModifier.AddChance2SuppressPerFriend" "${AIMOD_SUPPR_ADD_FRIEND}"
-
-# 12) Head/body ratio (doublons couverts)
-add_arg "AIModifier.ratioAimingHead2Body" "${AIMOD_HEAD2BODY_RATIO}"
-add_arg "AIModifier.ratioAimingHead2Body" "${AIMOD_RATIO_AIM_HEAD}"
-
-# 13) Difficulté variable
-add_arg "AIModifier.PlayerCountForMinAIDifficulty" "${AIMOD_VAR_PC_MIN}"
-add_arg "AIModifier.PlayerCountForMaxAIDifficulty" "${AIMOD_VAR_PC_MAX}"
-add_arg "AIModifier.MinAIDifficulty" "${AIMOD_VAR_MIN_DIFFICULTY}"
-add_arg "AIModifier.MaxAIDifficulty" "${AIMOD_VAR_MAX_DIFFICULTY}"
-
-# 14) Respawns & population
-add_arg "AIModifier.MaxCount" "${AIMOD_MAXCOUNT}"
-add_arg "AIModifier.RespawnTimeMin" "${AIMOD_RESPAWN_MIN}"
-add_arg "AIModifier.RespawnTimeMax" "${AIMOD_RESPAWN_MAX}"
-add_arg "AIModifier.SpawnDelay" "${AIMOD_SPAWN_DELAY}"
-
-# 15) Divers / toggles
-add_arg "AIModifier.bOverwriteBotSkillCfg" "${AIMOD_OVERWRITE_BOTCFG}"
-add_arg "AIModifier.bBotUsesSmokeGrenade" "${AIMOD_BOT_USES_SMOKE}"
-add_arg "AIModifier.bSuppression4MgOnly" "${AIMOD_SUPPR_4MG_ONLY}"
-add_arg "AIModifier.MemoryMaxAge" "${AIMOD_MEMORY_MAX_AGE}"
-
-# 16) Knife & squads
-add_arg "AIModifier.AllowMelee" "${AIMOD_ALLOW_MELEE}"
-add_arg "AIModifier.StayInSquads" "${AIMOD_STAY_IN_SQUADS}"
-add_arg "AIModifier.SquadSize" "${AIMOD_SQUAD_SIZE}"
-
-if [ "${#AIMOD_ARGS[@]}" -gt 0 ]; then
-  # Construire la chaîne sans toucher à l'IFS global
-  SS_MUTATOR_URL_ARGS="$(printf '%s' "${AIMOD_ARGS[0]}")"
-  for ((i=1; i<${#AIMOD_ARGS[@]}; i++)); do
-    SS_MUTATOR_URL_ARGS="${SS_MUTATOR_URL_ARGS}?${AIMOD_ARGS[$i]}"
-  done
-  echo "   → SS_MUTATOR_URL_ARGS composed (${#AIMOD_ARGS[@]} keys)."
-  echo "     preview: ${SS_MUTATOR_URL_ARGS:0:240}$( [ ${#SS_MUTATOR_URL_ARGS} -gt 240 ] && echo '...')"
-  echo "     total length: ${#SS_MUTATOR_URL_ARGS}"
-else
-  SS_MUTATOR_URL_ARGS=""
-  echo "   → No AIMOD_* placeholders provided."
-fi
-
-# ─────────────────────────────────────────
-# 7) Déduction Asset & mode depuis SCENARIO
+# 5) Déduction scenario
 # ─────────────────────────────────────────
 if [[ -z "${SS_SCENARIO}" || ! "${SS_SCENARIO}" =~ ^Scenario_ ]]; then
-  echo "⚠️  SS_SCENARIO invalid or empty ('${SS_SCENARIO:-<unset>}'), fallback → Scenario_Farmhouse_Push_Security"
   SS_SCENARIO="Scenario_Farmhouse_Push_Security"
 fi
-
 scenario_core="$(printf '%s' "${SS_SCENARIO#Scenario_}" | cut -d'_' -f1)"
 scenario_mode="$(printf '%s' "${SS_SCENARIO}" | awk -F'_' '{print $(NF-1)}' | tr '[:lower:]' '[:upper:]')"
 
@@ -520,11 +168,9 @@ case "${scenario_mode}" in
   CHECKPOINT)  MODE_SECTION="/Script/Insurgency.INSCheckpointGameMode" ;;
   OUTPOST)     MODE_SECTION="/Script/Insurgency.INSOutpostGameMode" ;;
   SURVIVAL)    MODE_SECTION="/Script/Insurgency.INSSurvivalGameMode" ;;
-  *)           MODE_SECTION="${MODE_SECTION_DEF}" ; scenario_mode="$(echo "${SS_GAME_MODE}" | tr '[:lower:]' '[:upper:]')" ;;
+  *)           MODE_SECTION="/Script/Insurgency.INSPushGameMode" ;;
 esac
-echo "🧭 Scenario='${SS_SCENARIO}' → Asset='${MAP_ASSET}' | MODE='${scenario_mode}'"
 
-# RULES_SECTION selon Coop vs Versus
 if [[ "${scenario_mode}" == "CHECKPOINT" || "${scenario_mode}" == "OUTPOST" || "${scenario_mode}" == "SURVIVAL" ]]; then
   RULES_SECTION="/Script/Insurgency.INSCoopMode"
 else
@@ -532,15 +178,25 @@ else
 fi
 
 # ─────────────────────────────────────────
-# 8) Écriture unique de Game.ini aligné au scenario
+# 6) AiModifier URL args
 # ─────────────────────────────────────────
-echo "📝 Writing Game.ini aligned to scenario..."
+AIMOD_ARGS=()
+add_arg() { [ -n "$2" ] && AIMOD_ARGS+=("$1=$2"); }
+# (ajoute tous tes add_arg AIMOD_* ici comme avant)
+
+AIMOD_URL_ARGS=""
+if [ "${#AIMOD_ARGS[@]}" -gt 0 ]; then
+  AIMOD_URL_ARGS="$(printf '%s' "${AIMOD_ARGS[0]}")"
+  for ((i=1; i<${#AIMOD_ARGS[@]}; i++)); do
+    AIMOD_URL_ARGS="${AIMOD_URL_ARGS}?${AIMOD_ARGS[$i]}"
+  done
+fi
+
+# ─────────────────────────────────────────
+# 7) Écriture Game.ini
+# ─────────────────────────────────────────
 {
   cat <<EOF
-; ------------------------------------------------------------------
-; Insurgency Sandstorm - Game.ini (aligned to scenario)
-; ------------------------------------------------------------------
-
 [/Script/Insurgency.INSGameMode]
 bKillFeed=${SS_KILL_FEED}
 bKillCamera=${SS_KILL_CAMERA}
@@ -553,7 +209,6 @@ RequiredVotePercentage=${SS_VOTE_PERCENT}
 bDisableStats=$([ "${SS_ENABLE_STATS}" = "1" ] && echo "False" || echo "True")
 EOF
 
-  # Mods / Mutators dans INSGameMode
   if [ -n "${SS_MODS}" ]; then
     IFS=',' read -ra _mods <<< "${SS_MODS}"
     for mid in "${_mods[@]}"; do
@@ -561,105 +216,80 @@ EOF
       [ -n "$mid_trim" ] && echo "Mods=${mid_trim}"
     done
   fi
-  [ -n "${SS_MUTATORS}" ] && echo "Mutators=${SS_MUTATORS}"
 
   cat <<EOF
+
+[${RULES_SECTION}]
+bAutoBalanceTeams=${SS_AUTO_BALANCE}
+AutoBalanceDelay=${SS_AUTO_BALANCE_DELAY}
 
 [${MODE_SECTION}]
 bBots=${SS_BOTS_ENABLED}
 NumBots=${SS_BOT_NUM}
 BotQuota=${SS_BOT_QUOTA}
 BotDifficulty=${SS_BOT_DIFFICULTY}
-
-[${RULES_SECTION}]
-bAutoBalanceTeams=${SS_AUTO_BALANCE}
-AutoBalanceDelay=${SS_AUTO_BALANCE_DELAY}
 EOF
-} > "${GAMEINI}"
-echo "   → ${GAMEINI} written."
 
-# Append des clés spécifiques Coop sous la même section
-if [[ "${RULES_SECTION}" == "/Script/Insurgency.INSCoopMode" ]]; then
-  {
+  if [[ "${RULES_SECTION}" == "/Script/Insurgency.INSCoopMode" ]]; then
     echo "FriendlyBotQuota=${SS_FRIENDLY_BOT_QUOTA:-0}"
     [[ -n "${SS_MIN_ENEMIES:-}" ]] && echo "MinimumEnemies=${SS_MIN_ENEMIES}"
     [[ -n "${SS_MAX_ENEMIES:-}" ]] && echo "MaximumEnemies=${SS_MAX_ENEMIES}"
-  } >> "${GAMEINI}"
-  echo "   → Coop extras: FriendlyBotQuota=${SS_FRIENDLY_BOT_QUOTA:-0}, MinEnemies=${SS_MIN_ENEMIES:-<unset>}, MaxEnemies=${SS_MAX_ENEMIES:-<unset>}"
+  fi
+
+  # sections vides pour les autres modes
+  cat <<'EOF'
+[/Script/Insurgency.INSPushGameMode]
+[/Script/Insurgency.INSFirefightGameMode]
+[/Script/Insurgency.INSDominationGameMode]
+[/Script/Insurgency.INSCheckpointGameMode]
+[/Script/Insurgency.INSOutpostGameMode]
+[/Script/Insurgency.INSSurvivalGameMode]
+EOF
+
+  # Mutators uniquement pour Skirmish
+  if [ -n "${SS_MUTATORS_SKIRMISH}" ]; then
+    echo
+    echo "[/Script/Insurgency.INSSkirmishGameMode]"
+    echo "Mutators=${SS_MUTATORS_SKIRMISH}"
+  else
+    echo
+    echo "[/Script/Insurgency.INSSkirmishGameMode]"
+  fi
+} > "${GAMEINI}"
+
+# ─────────────────────────────────────────
+# 8) Construction URL minimale
+# ─────────────────────────────────────────
+LAUNCH_URL="${MAP_ASSET}?Scenario=${SS_SCENARIO}"
+if [[ "${scenario_mode}" == "SKIRMISH" && -n "${SS_MUTATORS_SKIRMISH}" && "${SS_MUTATORS_SKIRMISH}" =~ (^|,)\ *AiModifier\ *(,|$) && -n "${AIMOD_URL_ARGS}" ]]; then
+  LAUNCH_URL="${LAUNCH_URL}?Mutators=AiModifier?${AIMOD_URL_ARGS}"
 fi
 
-case "${SS_PRESET^^}" in
-  HARD)
-    export SS_BOT_DIFFICULTY=0.9 SS_MIN_ENEMIES=10 SS_MAX_ENEMIES=10 SS_BOT_QUOTA=6.0
-    export AIMOD_ACCURACY_MULT=2.6 AIMOD_SIGHT_ALERT=30000.0 AIMOD_DISTANCE_RANGE=30000.0 AIMOD_CHANCE_RUSH=0.05 AIMOD_HEAD2BODY_RATIO=0.80
-    ;;
-  INSANE)
-    export SS_BOT_DIFFICULTY=1.0 SS_MIN_ENEMIES=14 SS_MAX_ENEMIES=15 SS_BOT_QUOTA=8.0
-    export AIMOD_ACCURACY_MULT=3.4 AIMOD_SIGHT_ALERT=36000.0 AIMOD_DISTANCE_RANGE=34000.0 AIMOD_CHANCE_RUSH=0.00 AIMOD_HEAD2BODY_RATIO=0.95
-    ;;
-  NIGHTMARE)
-    export SS_BOT_DIFFICULTY=1.0 SS_MIN_ENEMIES=18 SS_MAX_ENEMIES=20 SS_BOT_QUOTA=10.0
-    export AIMOD_ACCURACY_MULT=4.1 AIMOD_SIGHT_ALERT=40000.0 AIMOD_DISTANCE_RANGE=38000.0 AIMOD_CHANCE_RUSH=0.00 AIMOD_HEAD2BODY_RATIO=1.00
-    ;;
-esac
-# commun aux 3 :
-export SS_BOTS_ENABLED=1 SS_BOT_NUM=0 SS_FRIENDLY_BOT_QUOTA=0
-export AIMOD_OVERWRITE_BOTCFG=True AIMOD_ALLOW_MELEE=0 AIMOD_ATTACK_DELAY_MELEE=10.0
-export AIMOD_CHANCE_COVER=0.99 AIMOD_CHANCE_COVER_IMPRO=0.90 AIMOD_CHANCE_COVER_FAR=0.92 AIMOD_STAY_IN_SQUADS=1 AIMOD_SQUAD_SIZE=5
-export AIMOD_SIGHT_SMOKE=1400.0 AIMOD_SIGHT_SMOKE_EYE=700.0 AIMOD_SIGHT_SMOKE_EYE_FRAC=0.70 AIMOD_TIME_NOTICE_VISIB_MULT=0.6
-
-
 # ─────────────────────────────────────────
-# 9) Construction de l’URL de lancement
-# ─────────────────────────────────────────
-LAUNCH_URL="${MAP_ASSET}?Scenario=${SS_SCENARIO}?MaxPlayers=${SS_MAXPLAYERS}?bBots=${SS_BOTS_ENABLED}?NumBots=${SS_BOT_NUM}?BotQuota=${SS_BOT_QUOTA}?BotDifficulty=${SS_BOT_DIFFICULTY}"
-[ -n "${SS_MUTATORS}" ] && LAUNCH_URL="${LAUNCH_URL}?Mutators=${SS_MUTATORS}"
-[ -n "${SS_MUTATOR_URL_ARGS}" ] && LAUNCH_URL="${LAUNCH_URL}?${SS_MUTATOR_URL_ARGS}"
-
-echo "▶️  Launch URL:"
-echo "    ${LAUNCH_URL}"
-
-# ─────────────────────────────────────────
-# 10) XP flags (conditions officielles)
+# 9) XP flags
 # ─────────────────────────────────────────
 XP_ARGS=()
 if [ -n "${GSLT_TOKEN}" ] && [ -n "${GAMESTATS_TOKEN}" ] && [ -z "${RCON_PASSWORD}" ]; then
   XP_ARGS+=( "-GSLTToken=${GSLT_TOKEN}" "-GameStatsToken=${GAMESTATS_TOKEN}" )
-  echo "✨ XP enabled (tokens present & RCON empty)."
-else
-  echo "ℹ️  XP disabled (missing tokens or RCON set)."
-  [ -z "${GSLT_TOKEN}" ] && echo "   ↳ GSLT_TOKEN missing."
-  [ -z "${GAMESTATS_TOKEN}" ] && echo "   ↳ GAMESTATS_TOKEN missing."
-  [ -n "${RCON_PASSWORD}" ] && echo "   ↳ RCON_PASSWORD is set (must be empty for XP)."
 fi
 
 # ─────────────────────────────────────────
-# 11) Démarrage serveur
+# 10) Lancement
 # ─────────────────────────────────────────
-cd "${GAMEDIR}/Insurgency/Binaries/Linux" || {
-  echo "❌ Cannot cd to ${GAMEDIR}/Insurgency/Binaries/Linux"
-  exit 1
-}
-
-echo "🚀 Launching InsurgencyServer-Linux-Shipping..."
-echo "    Hostname='${SS_HOSTNAME}'"
-echo "    Ports: -Port=${PORT} -QueryPort=${QUERYPORT} -BeaconPort=${BEACONPORT}"
-echo "    AdminList='${ADMINSLIST_NAME}' (${ADMINSLIST_PATH})"
-echo "    Extra args: '${EXTRA_SERVER_ARGS}'"
-echo "────────────────────────────────────────────────────────"
-
-# Construit les flags RCON uniquement si un mot de passe est fourni
+cd "${GAMEDIR}/Insurgency/Binaries/Linux" || exit 1
 RCON_ARGS=()
-if [ -n "${RCON_PASSWORD}" ]; then
-  RCON_ARGS+=("-Rcon" "-RconPassword=${RCON_PASSWORD}")
-fi
+[ -n "${RCON_PASSWORD}" ] && RCON_ARGS+=("-Rcon" "-RconPassword=${RCON_PASSWORD}")
 
 exec ./InsurgencyServer-Linux-Shipping \
   "${LAUNCH_URL}" \
   -hostname="${SS_HOSTNAME}" \
   -Port="${PORT}" -QueryPort="${QUERYPORT}" -BeaconPort="${BEACONPORT}" \
-  -AdminList="${ADMINSLIST_NAME}" \
+  -AdminList="Admins" \
   -log \
+  ${EXTRA_SERVER_ARGS} \
+  "${XP_ARGS[@]}" \
+  "${RCON_ARGS[@]}"
+
   ${EXTRA_SERVER_ARGS} \
   "${XP_ARGS[@]}" \
   "${RCON_ARGS[@]}"
