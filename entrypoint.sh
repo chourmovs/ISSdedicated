@@ -193,6 +193,58 @@ if [ "${#AIMOD_ARGS[@]}" -gt 0 ]; then
 fi
 
 # ─────────────────────────────────────────
+# Whitelist Mods/Mutators (bots-only)
+# ─────────────────────────────────────────
+SS_MUTATOR_WHITELIST="${SS_MUTATOR_WHITELIST:-AiModifier}"
+SS_ENFORCE_MUTATOR_WHITELIST="${SS_ENFORCE_MUTATOR_WHITELIST:-1}"
+
+SS_MODS_WHITELIST="${SS_MODS_WHITELIST:-}"
+SS_ENFORCE_MODS_WHITELIST="${SS_ENFORCE_MODS_WHITELIST:-0}"
+
+# util: filtre CSV par whitelist (case-insensitive, trim)
+filter_csv_by_whitelist() {
+  local csv="$1" wl="$2"
+  [[ -z "$csv" ]] && { echo ""; return; }
+  [[ -z "$wl"  ]] && { echo "$csv"; return; }
+
+  IFS=',' read -ra items <<< "$csv"
+  IFS=',' read -ra allowed <<< "$wl"
+
+  # normalise whitelist en minuscule
+  declare -A allow
+  for ok in "${allowed[@]}"; do
+    k="$(echo "$ok" | xargs | tr '[:upper:]' '[:lower:]')"
+    [[ -n "$k" ]] && allow["$k"]=1
+  done
+
+  out=()
+  for it in "${items[@]}"; do
+    val="$(echo "$it" | xargs)"
+    key="$(echo "$val" | tr '[:upper:]' '[:lower:]')"
+    if [[ -n "$val" && -n "${allow[$key]:-}" ]]; then
+      out+=("$val")
+    else
+      echo "🚫 filtered out (not whitelisted): '$val'" >&2
+    fi
+  done
+  (IFS=','; echo "${out[*]}")
+}
+
+# 2.1) Mutators (nous ne les écrivons que pour Skirmish)
+ACTIVE_MUTATORS_SKIRMISH="${SS_MUTATORS_SKIRMISH}"
+if [[ "${SS_ENFORCE_MUTATOR_WHITELIST}" == "1" ]]; then
+  ACTIVE_MUTATORS_SKIRMISH="$(filter_csv_by_whitelist "${SS_MUTATORS_SKIRMISH}" "${SS_MUTATOR_WHITELIST}")"
+fi
+
+# 2.2) Workshop Mods (IDs numériques)
+ACTIVE_MODS="${SS_MODS}"
+if [[ "${SS_ENFORCE_MODS_WHITELIST}" == "1" && -n "${SS_MODS_WHITELIST}" ]]; then
+  ACTIVE_MODS="$(filter_csv_by_whitelist "${SS_MODS}" "${SS_MODS_WHITELIST}")"
+fi
+
+
+
+# ─────────────────────────────────────────
 # 7) Écriture Game.ini
 # ─────────────────────────────────────────
 {
@@ -209,8 +261,9 @@ RequiredVotePercentage=${SS_VOTE_PERCENT}
 bDisableStats=$([ "${SS_ENABLE_STATS}" = "1" ] && echo "False" || echo "True")
 EOF
 
-  if [ -n "${SS_MODS}" ]; then
-    IFS=',' read -ra _mods <<< "${SS_MODS}"
+
+  if [ -n "${ACTIVE_MODS}" ]; then
+    IFS=',' read -ra _mods <<< "${ACTIVE_MODS}"
     for mid in "${_mods[@]}"; do
       mid_trim="$(echo "$mid" | xargs)"
       [ -n "$mid_trim" ] && echo "Mods=${mid_trim}"
@@ -261,9 +314,12 @@ EOF
 # 8) Construction URL minimale
 # ─────────────────────────────────────────
 LAUNCH_URL="${MAP_ASSET}?Scenario=${SS_SCENARIO}"
-if [[ "${scenario_mode}" == "SKIRMISH" && -n "${SS_MUTATORS_SKIRMISH}" && "${SS_MUTATORS_SKIRMISH}" =~ (^|,)\ *AiModifier\ *(,|$) && -n "${AIMOD_URL_ARGS}" ]]; then
+
+# n’envoie AiModifier en URL QUE si il est dans la liste filtrée
+if [[ "${scenario_mode}" == "SKIRMISH" && -n "${ACTIVE_MUTATORS_SKIRMISH}" && "${ACTIVE_MUTATORS_SKIRMISH}" =~ (^|,)\ *AiModifier\ *(,|$) && -n "${AIMOD_URL_ARGS}" ]]; then
   LAUNCH_URL="${LAUNCH_URL}?Mutators=AiModifier?${AIMOD_URL_ARGS}"
 fi
+
 
 # ─────────────────────────────────────────
 # 9) XP flags
