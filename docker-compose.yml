@@ -6,194 +6,215 @@ services:
     container_name: sandstorm
     restart: unless-stopped
 
+    # Réseaux/ports
     ports:
       - "27102:27102/udp"   # Game
       - "27131:27131/udp"   # Query
       - "15000:15000/udp"   # Beacon
-      - "27015:27015/tcp"   # RCON (laisse mappé même si vide)
+      - "27015:27015/tcp"   # RCON (si tu l'utilises)
 
+    # Stockage
     volumes:
-      - /opt/sandstorm:/opt/sandstorm      # binaires + configs + mods
-      - /opt/steam:/home/steam/Steam       # cache SteamCMD
+      - /opt/sandstorm:/opt/sandstorm              # binaires + configs + workshop
+      - /opt/steam:/home/steam/Steam               # cache SteamCMD
 
-    # garde ton UID/GID host
+    # UID/GID host (facultatif mais recommandé)
     user: "1000:1000"
 
     environment:
-      # ───────── Identité / slots ─────────
-      SS_HOSTNAME: "CHOURMOVS ISS (Push)• 8x8 Bots 0.6"
-      SS_MAXPLAYERS: "28"                   # laisse haut pour permettre bcp de bots
+      # ────────── Base serveur ──────────
+      GAMEDIR: "/opt/sandstorm"
+      AUTO_UPDATE: "1"
 
-      # ───────── Mode / Scénario / Cycle ─────────
-      SS_GAME_MODE: "Push"
-      SS_SCENARIO: "Scenario_Farmhouse_Push_Security"   # safe & lisible
+      SS_HOSTNAME: "CHOURMOVS ISS • COOP Checkpoint"
+      SS_MAXPLAYERS: "24"
+
+      # ────────── Lancement par défaut (COOP) ──────────
+      SS_GAME_MODE: "Checkpoint"
+      SS_SCENARIO: "Scenario_Farmhouse_Checkpoint_Security"
+
+
+      # MapCycle 100% coop (utilisé pour l’écran de vote)
       SS_MAPCYCLE: |
-        Scenario_Farmhouse_Push_Security
-        Scenario_Crossing_Push_Security
-        Scenario_Hideout_Push_Security
+        Scenario_Farmhouse_Checkpoint_Security
+        Scenario_Crossing_Checkpoint_Security
+        Scenario_Hideout_Checkpoint_Security
+        Scenario_Refinery_Checkpoint_Security
+        Scenario_Summit_Checkpoint_Security
+        Scenario_Hillside_Checkpoint_Security
+        Scenario_Precinct_Checkpoint_Security
+        Scenario_Ministry_Checkpoint_Security
+        Scenario_Outskirts_Checkpoint_Security
+        Scenario_PowerPlant_Checkpoint_Security
 
-      # ───────── Bots VS ─────────
-      SS_BOTS_ENABLED: "1"
-      SS_BOT_NUM: "1"               # alliés minimaux
-      SS_BOT_QUOTA: "8.0"           # ratio ennemis
-      SS_BOT_DIFFICULTY: "0.6"
-
-      # ───────── Auto-balance ─────────
-      SS_AUTO_BALANCE: "False"
-      SS_AUTO_BALANCE_DELAY: "10"
-
-      # ───────── QOL ─────────
+      # ────────── QoL / Vote / Timers ──────────
       SS_KILL_FEED: "1"
       SS_KILL_CAMERA: "0"
       SS_VOICE_ENABLED: "1"
-      SS_FRIENDLY_FIRE_SCALE: "0.0"
-
-      # ───────── Timings / Vote ─────────
+      SS_FRIENDLY_FIRE_SCALE: "0.2"
       SS_ROUND_TIME: "900"
       SS_POST_ROUND_TIME: "15"
       SS_VOTE_ENABLED: "1"
       SS_VOTE_PERCENT: "0.6"
 
-      # ───────── XP classé (Stats) ─────────
-      # ⚠️ Pour que l’XP fonctionne : GSLT_TOKEN + GAMESTATS_TOKEN valides ET RCON_PASSWORD vide.
-      SS_ENABLE_STATS: "1"                 # l’entrypoint écrit bDisableStats=False
-      GSLT_TOKEN: "${GSLT_TOKEN}"          # crée sur https://steamcommunity.com/dev/managegameservers
-      GAMESTATS_TOKEN: "${GAMESTATS_TOKEN}"# récupère sur https://gamestats.sandstorm.game
-      RCON_PASSWORD: ""                    # doit rester vide pour l’XP classé
+      # ────────── Bots (COOP) ──────────
+      SS_BOTS_ENABLED: "1"
+      SS_BOT_NUM: "0"
+      SS_BOT_QUOTA: "6.0"        # (peu d'effet en coop, OK de laisser)
+      SS_BOT_DIFFICULTY: "0.9"
+      SS_FRIENDLY_BOT_QUOTA: "0"
+      SS_MIN_ENEMIES: "10"
+      SS_MAX_ENEMIES: "16"
 
-      # ───────── Admin menu côté client ─────────
-      # Liste de SteamID64 (17 chiffres) séparés par des virgules.
-      SS_ADMINS: "76561198000000001,76561198000000002"
+      # ────────── XP / Stats ──────────
+      SS_ENABLE_STATS: "1"
+      RCON_PASSWORD: ""          # Le RCON n’empêche pas l’XP
 
-      # ───────── Mods & Mutators ─────────
-      SS_MODS: "1141916"                   # AiModifier (mod.io) — auto-download
-      SS_MUTATORS: "AiModifier"            # charge le mutator
-      SS_MUTATOR_URL_ARGS: ""              # rempli automatiquement via placeholders ci‑dessous
-      EXTRA_SERVER_ARGS: ""                # args bruts optionnels
-      AUTO_UPDATE: "1"
+      # ────────── Workshop / Mutators ──────────
+      SS_MODS: "1141916"         # (ex: AiModifier Workshop ID si requis par ton build)
+      SS_MUTATORS: "AiModifier"  # Active AiModifier (les CVAR ci-dessous s’appliqueront)
 
-      # ───────── AiModifier (placeholders) ─────────
-      # Difficulté & skill
-            # ───────── AiModifier (ENRAGED defaults) ─────────
-      # Skill de base
-      AIMOD_DIFFICULTY: "0.9"          # 0–1
-      AIMOD_ACCURACY: "1.0"            # 0–1 (tirs précis)
-      AIMOD_REACTION: "0.10"           # 0–1 (réaction très rapide)
+      # ───────────────────────────────────────────────
+      #                AiModifier — TOUTES les CVAR
+      # (laisse vide celles que tu ne veux pas surcharger)
+      # ───────────────────────────────────────────────
 
-      # Sight / vision
-      AIMOD_SIGHT_ALERT: "25000.0"
-      AIMOD_SIGHT_IDLE: "20000.0"
-      AIMOD_SIGHT_SMOKE: "600.0"
-      AIMOD_SIGHT_SMOKE_EYE: "300.0"
-      AIMOD_SIGHT_SMOKE_EYE_FRAC: "0.6"
-      AIMOD_MIN_LI_SEE: "0.010"                 # MinLightIntensityToSeeTarget
-      AIMOD_MIN_LI_NIGHT: "0.010"               # MinLightIntensitytoSeeTargetatNight
-      AIMOD_LI_FULLY_VISIBLE: "0.15"            # LightIntensityforFullyVisibleTarget
-      AIMOD_TIME_NOTICE_VISIB_MULT: "1.2"       # TimetoNoticeVisibilityMultiplier
-      AIMOD_MIN_LI_AFFECT_NV: "40.0"            # MinLightIntensitytoAffectNightVision
-      AIMOD_MIN_NV_STRENGTH: "0.20"             # MinNightVisionSightStrength
+      # 1) Skill de base
+      AIMOD_DIFFICULTY: "0.6"
+      AIMOD_ACCURACY: "0.6"
+      AIMOD_REACTION: "0.6"
 
-      # Chances d’être spotté (on rend le joueur + visible)
-      AIMOD_CH_SPRINT_MULT: "3.0"               # ChanceSprintMultiplier
-      AIMOD_CH_MOVING_MULT: "2.0"               # ChanceMovingMultiplier
-      AIMOD_CH_STAND_DIST: "70.0"               # ChanceAtDistanceStanding
-      AIMOD_CH_STAND_CLOSE: "98.0"              # ChanceAtCloseRangeStanding
-      AIMOD_CH_CROUCH_DIST: "6.0"               # ChanceAtDistanceCrouched
-      AIMOD_CH_CROUCH_CLOSE: "50.0"             # ChanceAtCloseRangeCrouched
-      AIMOD_CH_PRONE_DIST: "0.10"               # ChanceAtDistanceProne
-      AIMOD_CH_PRONE_CLOSE: "30.0"              # ChanceAtCloseRangeProne
+      # 2) Sight / vision
+      AIMOD_SIGHT_ALERT: ""
+      AIMOD_SIGHT_IDLE: ""
+      AIMOD_SIGHT_SMOKE: ""
+      AIMOD_SIGHT_SMOKE_EYE: ""
+      AIMOD_SIGHT_SMOKE_EYE_FRAC: ""
+      AIMOD_MIN_LI_SEE: ""
+      AIMOD_MIN_LI_NIGHT: ""
+      AIMOD_LI_FULLY_VISIBLE: ""
+      AIMOD_TIME_NOTICE_VISIB_MULT: ""
+      AIMOD_MIN_LI_AFFECT_NV: ""
+      AIMOD_MIN_NV_STRENGTH: ""
 
-      # Ouïe
-      AIMOD_HEAR_AWARE_RADIAL: "3000.0"
-      AIMOD_HEAR_AWARE_GUNSHOT: "12000.0"
-      AIMOD_HEAR_AWARE_SPRINT: "2500.0"
-      AIMOD_HEAR_AWARE_FOOT: "1000.0"
-      AIMOD_HEAR_DIST_SPRINT: "4500.0"
-      AIMOD_HEAR_DIST_RUN: "2500.0"
-      AIMOD_HEAR_Z_MIN: "200.0"
-      AIMOD_HEAR_Z_MAX: "500.0"
-      AIMOD_HEAR_FENCED_MOD: "0.80"            # FencedTargetHearAbilityModifier
+      # 3) Chances d’être spotté
+      AIMOD_CH_SPRINT_MULT: ""
+      AIMOD_CH_MOVING_MULT: ""
+      AIMOD_CH_STAND_DIST: ""
+      AIMOD_CH_STAND_CLOSE: ""
+      AIMOD_CH_CROUCH_DIST: ""
+      AIMOD_CH_CROUCH_CLOSE: ""
+      AIMOD_CH_PRONE_DIST: ""
+      AIMOD_CH_PRONE_CLOSE: ""
 
-      # Vitesse de rotation (plus nerveux)
-      AIMOD_TURNSPD_MAX_ANGLE_TH: "300"
-      AIMOD_TURNSPD_MIN_ANGLE_TH: "30"
-      AIMOD_TURNSPD_MAX: "120"                  # TurnSpeedMaxAngle
-      AIMOD_TURNSPD_MIN: "120"                  # TurnSpeedMinAngle
-      AIMOD_TURNSPD_DIST_TH: "2500.0"
-      AIMOD_TURNSPD_SCALE_MAX: "2.0"
+      # 4) Ouïe
+      AIMOD_HEAR_AWARE_RADIAL: ""
+      AIMOD_HEAR_AWARE_GUNSHOT: ""
+      AIMOD_HEAR_AWARE_SPRINT: ""
+      AIMOD_HEAR_AWARE_FOOT: ""
+      AIMOD_HEAR_DIST_SPRINT: ""
+      AIMOD_HEAR_DIST_RUN: ""
+      AIMOD_HEAR_Z_MIN: ""
+      AIMOD_HEAR_Z_MAX: ""
+      AIMOD_HEAR_FENCED_MOD: ""
 
-      # Délai d’engagement & distance
-      AIMOD_ATTACK_DELAY_CLOSE: "0.10"
-      AIMOD_ATTACK_DELAY_DIST: "0.25"
-      AIMOD_ATTACK_DELAY_MELEE: "0.30"
-      AIMOD_DISTANCE_RANGE: "18000.0"
-      AIMOD_CLOSE_RANGE: "900.0"
-      AIMOD_MID_RANGE: "4000.0"
+      # 5) Vitesse de rotation
+      AIMOD_TURNSPD_MAX_ANGLE_TH: ""
+      AIMOD_TURNSPD_MIN_ANGLE_TH: ""
+      AIMOD_TURNSPD_MAX: ""
+      AIMOD_TURNSPD_MIN: ""
+      AIMOD_TURNSPD_DIST_TH: ""
+      AIMOD_TURNSPD_SCALE_MAX: ""
+      AIMOD_TURNSPD_SCALE_MIN: ""
 
-      # Précision / bloatbox
-      AIMOD_ACCURACY_MULT: "2.8"                # AccuracyMultiplier
-      AIMOD_SUPPRESS_ACCURACY_MULT: "0.8"       # SuppressionAccuracyMultiplier
-      AIMOD_NIGHT_ACC_FACTOR: "1.0"             # NightAccuracyFactor (pas de malus)
-      AIMOD_ZERO_TIME_EASY: "1.5"
-      AIMOD_ZERO_TIME_HARD: "0.25"
-      AIMOD_BLOAT_MULT_EASY: "1.5"
-      AIMOD_BLOAT_MULT_HARD: "0.25"
-      AIMOD_BLOAT_DIST_MULT: "1.2"
-      AIMOD_BLOAT_MAX_DIST: "25000.0"
-      AIMOD_BLOAT_MIN_DIST: "1500.0"
+      # 6) Attaque & distances
+      AIMOD_ATTACK_DELAY_CLOSE: ""
+      AIMOD_ATTACK_DELAY_DIST: ""
+      AIMOD_ATTACK_DELAY_MELEE: ""
+      AIMOD_DISTANCE_RANGE: ""
+      AIMOD_CLOSE_RANGE: ""
+      AIMOD_MID_RANGE: ""
+      AIMOD_FAR_RANGE: ""
+      AIMOD_MELEE_RANGE: ""
 
-      # Comportements offensifs
-      AIMOD_CHANCE_COVER: "0.9"                 # Chance2Cover
-      AIMOD_CHANCE_COVER_IMPRO: "0.60"          # Chance2ImprovisedCover
-      AIMOD_CHANCE_COVER_FAR: "0.50"            # Chance2CoverFar
-      AIMOD_MAX_DIST_2COVER: "3500"
-      AIMOD_CHANCE_WANDER: "0.10"
-      AIMOD_DEF_WANDER_DIST: "6500.0"
-      AIMOD_WANDER_DIST_MAX_MULT: "2.0"
-      AIMOD_CHANCE_FLANK: "0.60"
-      AIMOD_CHANCE_RUSH: "0.90"
-      AIMOD_CHANCE_HUNT: "0.80"
-      AIMOD_CHANCE_FORCE_HUNT: "0.60"
-      AIMOD_CHANCE_REGROUP: "0.40"
-      AIMOD_BONUS_SPOT_START: "2200.0"
-      AIMOD_MAX_BONUS_SPOT_HEAR: "0.98"
-      AIMOD_MAX_BONUS_SPOT_ALERT: "0.10"
-      AIMOD_CH_LEAN_MULT: "1.0"                 # ChanceLeanMultiplier (meilleure détection en lean)
-      AIMOD_MIN_CHANCE_HEAR: "0.10"
-      AIMOD_INJ_DMG_TH: "30"
-      AIMOD_INJ_HP_RATIO: "0.40"
-      AIMOD_DIST_NEAR_OBJ: "2200.0"
-      AIMOD_DIST_MID_OBJ: "3800.0"
-      AIMOD_DIST_FAR_OBJ: "9000.0"
-      AIMOD_RATIO_BOTS_CLOSE_OBJ: "0.6"
-      AIMOD_STOP_FIRE_NLOS_MIN: "2.0"
-      AIMOD_STOP_FIRE_NLOS_MAX: "5.0"
-      AIMOD_SUPPR_TIME_MIN: "6.0"
-      AIMOD_SUPPR_TIME_MAX: "12.0"
-      AIMOD_SUPPR_MIN_DIST: "300.0"
-      AIMOD_SUPPR_BASE_CH: "0.30"
-      AIMOD_SUPPR_ADD_FRIEND: "0.20"
-      AIMOD_HEAD2BODY_RATIO: "0.70"             # vise davantage la tête
+      # 7) Précision / bloatbox
+      AIMOD_ACCURACY_MULT: ""
+      AIMOD_SUPPRESS_ACCURACY_MULT: ""
+      AIMOD_NIGHT_ACC_FACTOR: ""
+      AIMOD_ZERO_TIME_EASY: ""
+      AIMOD_ZERO_TIME_MED: ""
+      AIMOD_ZERO_TIME_HARD: ""
+      AIMOD_BLOAT_MULT_EASY: ""
+      AIMOD_BLOAT_MULT_MED: ""
+      AIMOD_BLOAT_MULT_HARD: ""
+      AIMOD_BLOAT_DIST_MULT: ""
+      AIMOD_BLOAT_MAX_DIST: ""
+      AIMOD_BLOAT_MIN_DIST: ""
 
-      # Difficulté variable (overwrite INSCoopMode si utilisé par le mutator)
-      AIMOD_VAR_PC_MIN: "1"                     # PlayerCountForMinAIDifficulty
-      AIMOD_VAR_PC_MAX: "12"
-      AIMOD_VAR_MIN_DIFFICULTY: "0.70"
-      AIMOD_VAR_MAX_DIFFICULTY: "1.00"
+      # 8) Comportements offensifs / cover / wander / flanking
+      AIMOD_CHANCE_COVER: ""
+      AIMOD_CHANCE_COVER_IMPRO: ""
+      AIMOD_CHANCE_COVER_FAR: ""
+      AIMOD_MAX_DIST_2COVER: ""
+      AIMOD_CHANCE_WANDER: ""
+      AIMOD_DEF_WANDER_DIST: ""
+      AIMOD_WANDER_DIST_MAX_MULT: ""
+      AIMOD_CHANCE_FLANK: ""
+      AIMOD_CHANCE_RUSH: ""
+      AIMOD_CHANCE_HUNT: ""
+      AIMOD_CHANCE_FORCE_HUNT: ""
+      AIMOD_CHANCE_REGROUP: ""
 
-      # Misc utiles
-      AIMOD_OVERWRITE_BOTCFG: "True"            # bOverwriteBotSkillCfg
-      AIMOD_BOT_USES_SMOKE: "True"
-      AIMOD_SUPPR_4MG_ONLY: "True"
-      AIMOD_MEMORY_MAX_AGE: "120.0"
-      AIMOD_RATIO_AIM_HEAD: "0.70"
+      # 9) Spotting / leaning / injured / hearing min
+      AIMOD_BONUS_SPOT_START: ""
+      AIMOD_MAX_BONUS_SPOT_HEAR: ""
+      AIMOD_MAX_BONUS_SPOT_ALERT: ""
+      AIMOD_CH_LEAN_MULT: ""
+      AIMOD_MIN_CHANCE_HEAR: ""
+      AIMOD_INJ_DMG_TH: ""
+      AIMOD_INJ_HP_RATIO: ""
 
-      # (Déjà posés précédemment)
+      # 10) Objectifs
+      AIMOD_DIST_NEAR_OBJ: ""
+      AIMOD_DIST_MID_OBJ: ""
+      AIMOD_DIST_FAR_OBJ: ""
+      AIMOD_RATIO_BOTS_CLOSE_OBJ: ""
+
+      # 11) Suppression / NLOS / durées / distances
+      AIMOD_STOP_FIRE_NLOS_MIN: ""
+      AIMOD_STOP_FIRE_NLOS_MAX: ""
+      AIMOD_SUPPR_TIME_MIN: ""
+      AIMOD_SUPPR_TIME_MAX: ""
+      AIMOD_SUPPR_MIN_DIST: ""
+      AIMOD_SUPPR_BASE_CH: ""
+      AIMOD_SUPPR_ADD_FRIEND: ""
+
+      # 12) Head/body ratio (doublon volontaire)
+      AIMOD_HEAD2BODY_RATIO: ""
+      AIMOD_RATIO_AIM_HEAD: ""
+
+      # 13) Difficulté variable selon # joueurs
+      AIMOD_VAR_PC_MIN: ""
+      AIMOD_VAR_PC_MAX: ""
+      AIMOD_VAR_MIN_DIFFICULTY: ""
+      AIMOD_VAR_MAX_DIFFICULTY: ""
+
+      # 14) Respawns & population
+      AIMOD_MAXCOUNT: ""
+      AIMOD_RESPAWN_MIN: ""
+      AIMOD_RESPAWN_MAX: ""
+      AIMOD_SPAWN_DELAY: ""
+
+      # 15) Divers / toggles
+      AIMOD_OVERWRITE_BOTCFG: ""
+      AIMOD_BOT_USES_SMOKE: ""
+      AIMOD_SUPPR_4MG_ONLY: ""
+      AIMOD_MEMORY_MAX_AGE: ""
+
+      # 16) Knife & squads
       AIMOD_ALLOW_MELEE: "0"
       AIMOD_STAY_IN_SQUADS: "1"
-      AIMOD_SQUAD_SIZE: "6"
+      AIMOD_SQUAD_SIZE: "2"
 
-
-    stop_grace_period: 30s
-    stdin_open: true
-    tty: true
+      # ────────── Extra CLI (optionnel) ──────────
+      EXTRA_SERVER_ARGS: ""
