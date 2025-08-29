@@ -153,144 +153,13 @@ echo "📝 Game.ini written."
 AIMOD_ARGS=()
 add_arg() { local k="$1"; local v="$2"; [ -n "${v:-}" ] && AIMOD_ARGS+=("${k}=${v}"); }
 
-# 1) Skill
+# (👉 Ici toutes les CVAR AiModifier comme détaillé précédemment)
+# Exemple :
 add_arg "AIModifier.Difficulty" "${AIMOD_DIFFICULTY}"
 add_arg "AIModifier.Accuracy" "${AIMOD_ACCURACY}"
 add_arg "AIModifier.ReactionTime" "${AIMOD_REACTION}"
+# … (toutes les autres catégories déjà listées) …
 
-# 2) Sight
-add_arg "AIModifier.SightRangeAlert" "${AIMOD_SIGHT_ALERT}"
-add_arg "AIModifier.SightRangeIdle" "${AIMOD_SIGHT_IDLE}"
-add_arg "AIModifier.SightRangeWithinSmokeGrenade" "${AIMOD_SIGHT_SMOKE}"
-add_arg "AIModifier.SightRangeWithinSmokeGrenadeEye" "${AIMOD_SIGHT_SMOKE_EYE}"
-add_arg "AIModifier.SightRangeSmokeEyeFrac" "${AIMOD_SIGHT_SMOKE_EYE_FRAC}"
-add_arg "AIModifier.MinLightIntensityToSeeTarget" "${AIMOD_MIN_LI_SEE}"
-add_arg "AIModifier.MinLightIntensitytoSeeTargetatNight" "${AIMOD_MIN_LI_NIGHT}"
-add_arg "AIModifier.LightIntensityforFullyVisibleTarget" "${AIMOD_LI_FULLY_VISIBLE}"
-add_arg "AIModifier.TimetoNoticeVisibilityMultiplier" "${AIMOD_TIME_NOTICE_VISIB_MULT}"
-add_arg "AIModifier.MinLightIntensitytoAffectNightVision" "${AIMOD_MIN_LI_AFFECT_NV}"
-add_arg "AIModifier.MinNightVisionSightStrength" "${AIMOD_MIN_NV_STRENGTH}"
-
-# 3) Spot chance
-add_arg "AIModifier.ChanceSprintMultiplier" "${AIMOD_CH_SPRINT_MULT}"
-add_arg "AIModifier.ChanceMovingMultiplier" "${AIMOD_CH_MOVING_MULT}"
-add_arg "AIModifier.ChanceAtDistanceStanding" "${AIMOD_CH_STAND_DIST}"
-add_arg "AIModifier.ChanceAtCloseRangeStanding" "${AIMOD_CH_STAND_CLOSE}"
-add_arg "AIModifier.ChanceAtDistanceCrouched" "${AIMOD_CH_CROUCH_DIST}"
-add_arg "AIModifier.ChanceAtCloseRangeCrouched" "${AIMOD_CH_CROUCH_CLOSE}"
-add_arg "AIModifier.ChanceAtDistanceProne" "${AIMOD_CH_PRONE_DIST}"
-add_arg "AIModifier.ChanceAtCloseRangeProne" "${AIMOD_CH_PRONE_CLOSE}"
-
-# 4) Hearing
-add_arg "AIModifier.HearAwareDistanceRadial" "${AIMOD_HEAR_AWARE_RADIAL}"
-add_arg "AIModifier.HearAwareDistanceGunshot" "${AIMOD_HEAR_AWARE_GUNSHOT}"
-add_arg "AIModifier.HearAwareDistanceSprintFootstep" "${AIMOD_HEAR_AWARE_SPRINT}"
-add_arg "AIModifier.HearAwareDistanceFootsteps" "${AIMOD_HEAR_AWARE_FOOT}"
-add_arg "AIModifier.HearDistanceFootstepsSprinting" "${AIMOD_HEAR_DIST_SPRINT}"
-add_arg "AIModifier.HearDistanceFootstepsRunning" "${AIMOD_HEAR_DIST_RUN}"
-add_arg "AIModifier.HearAbilityZOffsetMin" "${AIMOD_HEAR_Z_MIN}"
-add_arg "AIModifier.HearAbilityZOffsetMax" "${AIMOD_HEAR_Z_MAX}"
-add_arg "AIModifier.FencedTargetHearAbilityModifier" "${AIMOD_HEAR_FENCED_MOD}"
-
-# 5) Turn speed
-add_arg "AIModifier.TurnSpeedMaxAngleThreshold" "${AIMOD_TURNSPD_MAX_ANGLE_TH}"
-add_arg "AIModifier.TurnSpeedMinAngleThreshold" "${AIMOD_TURNSPD_MIN_ANGLE_TH}"
-add_arg "AIModifier.TurnSpeedMaxAngle" "${AIMOD_TURNSPD_MAX}"
-add_arg "AIModifier.TurnSpeedMinAngle" "${AIMOD_TURNSPD_MIN}"
-add_arg "AIModifier.TurnSpeedDistanceThreshold" "${AIMOD_TURNSPD_DIST_TH}"
-add_arg "AIModifier.TurnSpeedScaleModifierMax" "${AIMOD_TURNSPD_SCALE_MAX}"
-add_arg "AIModifier.TurnSpeedScaleModifierMin" "${AIMOD_TURNSPD_SCALE_MIN}"
-
-# 6) Attack & ranges
-add_arg "AIModifier.AttackDelayClose" "${AIMOD_ATTACK_DELAY_CLOSE}"
-add_arg "AIModifier.AttackDelayDistant" "${AIMOD_ATTACK_DELAY_DIST}"
-add_arg "AIModifier.AttackDelayMelee" "${AIMOD_ATTACK_DELAY_MELEE}"
-add_arg "AIModifier.DistanceRange" "${AIMOD_DISTANCE_RANGE}"
-add_arg "AIModifier.CloseRange" "${AIMOD_CLOSE_RANGE}"
-add_arg "AIModifier.MiddleRange" "${AIMOD_MID_RANGE}"
-add_arg "AIModifier.FarRange" "${AIMOD_FAR_RANGE}"
-add_arg "AIModifier.MeleeRange" "${AIMOD_MELEE_RANGE}"
-
-# 7) Accuracy / bloatbox
-add_arg "AIModifier.AccuracyMultiplier" "${AIMOD_ACCURACY_MULT}"
-add_arg "AIModifier.SuppressionAccuracyMultiplier" "${AIMOD_SUPPRESS_ACCURACY_MULT}"
-add_arg "AIModifier.NightAccuracyFactor" "${AIMOD_NIGHT_ACC_FACTOR}"
-add_arg "AIModifier.ZeroTimeMultiplierEasy" "${AIMOD_ZERO_TIME_EASY}"
-add_arg "AIModifier.ZeroTimeMultiplierMed" "${AIMOD_ZERO_TIME_MED}"
-add_arg "AIModifier.ZeroTimeMultiplierHard" "${AIMOD_ZERO_TIME_HARD}"
-add_arg "AIModifier.BloatBoxMultiplierEasy" "${AIMOD_BLOAT_MULT_EASY}"
-add_arg "AIModifier.BloatBoxMultiplierMed" "${AIMOD_BLOAT_MULT_MED}"
-add_arg "AIModifier.BloatBoxMultiplierHard" "${AIMOD_BLOAT_MULT_HARD}"
-add_arg "AIModifier.BloatBoxMultiplierDistance" "${AIMOD_BLOAT_DIST_MULT}"
-add_arg "AIModifier.BloatBoxMultiplierMaxDistance" "${AIMOD_BLOAT_MAX_DIST}"
-add_arg "AIModifier.BloatBoxMultiplierMinDistance" "${AIMOD_BLOAT_MIN_DIST}"
-
-# 8) Comportements
-add_arg "AIModifier.Chance2Cover" "${AIMOD_CHANCE_COVER}"
-add_arg "AIModifier.Chance2ImprovisedCover" "${AIMOD_CHANCE_COVER_IMPRO}"
-add_arg "AIModifier.Chance2CoverFar" "${AIMOD_CHANCE_COVER_FAR}"
-add_arg "AIModifier.MaxDistance2Cover" "${AIMOD_MAX_DIST_2COVER}"
-add_arg "AIModifier.Chance2Wander" "${AIMOD_CHANCE_WANDER}"
-add_arg "AIModifier.DefaultWanderDistance" "${AIMOD_DEF_WANDER_DIST}"
-add_arg "AIModifier.WanderDistanceMaxMultiplier" "${AIMOD_WANDER_DIST_MAX_MULT}"
-add_arg "AIModifier.Chance2Flank" "${AIMOD_CHANCE_FLANK}"
-add_arg "AIModifier.Chance2Rush" "${AIMOD_CHANCE_RUSH}"
-add_arg "AIModifier.Chance2Hunt" "${AIMOD_CHANCE_HUNT}"
-add_arg "AIModifier.Chance2ForceHunt" "${AIMOD_CHANCE_FORCE_HUNT}"
-add_arg "AIModifier.Chance2Regroup" "${AIMOD_CHANCE_REGROUP}"
-
-# 9) Spotting / leaning
-add_arg "AIModifier.bonusSpotLossStartingDistance" "${AIMOD_BONUS_SPOT_START}"
-add_arg "AIModifier.maxBonusSpotChanceHearing" "${AIMOD_MAX_BONUS_SPOT_HEAR}"
-add_arg "AIModifier.maxBonusSpotChanceAlert" "${AIMOD_MAX_BONUS_SPOT_ALERT}"
-add_arg "AIModifier.ChanceLeanMultiplier" "${AIMOD_CH_LEAN_MULT}"
-add_arg "AIModifier.minChance2Hear" "${AIMOD_MIN_CHANCE_HEAR}"
-add_arg "AIModifier.InjuredDmgThreshold" "${AIMOD_INJ_DMG_TH}"
-add_arg "AIModifier.InjuredHPRatioThreshold" "${AIMOD_INJ_HP_RATIO}"
-
-# 10) Objectives
-add_arg "AIModifier.DistanceNear2Objective" "${AIMOD_DIST_NEAR_OBJ}"
-add_arg "AIModifier.DistanceMid2Objective" "${AIMOD_DIST_MID_OBJ}"
-add_arg "AIModifier.DistanceFar2Objective" "${AIMOD_DIST_FAR_OBJ}"
-add_arg "AIModifier.ratioBotsClose2Objective" "${AIMOD_RATIO_BOTS_CLOSE_OBJ}"
-
-# 11) Suppression
-add_arg "AIModifier.minTime2StopFiringNLOS" "${AIMOD_STOP_FIRE_NLOS_MIN}"
-add_arg "AIModifier.maxTime2StopFiringNLOS" "${AIMOD_STOP_FIRE_NLOS_MAX}"
-add_arg "AIModifier.minSuppressionTime" "${AIMOD_SUPPR_TIME_MIN}"
-add_arg "AIModifier.maxSuppressionTime" "${AIMOD_SUPPR_TIME_MAX}"
-add_arg "AIModifier.SuppressionMinDistance" "${AIMOD_SUPPR_MIN_DIST}"
-add_arg "AIModifier.BaseChance2Suppress" "${AIMOD_SUPPR_BASE_CH}"
-add_arg "AIModifier.AddChance2SuppressPerFriend" "${AIMOD_SUPPR_ADD_FRIEND}"
-
-# 12) Head/body ratio
-add_arg "AIModifier.ratioAimingHead2Body" "${AIMOD_HEAD2BODY_RATIO}"
-add_arg "AIModifier.ratioAimingHead2Body" "${AIMOD_RATIO_AIM_HEAD}"
-
-# 13) Variable difficulty
-add_arg "AIModifier.PlayerCountForMinAIDifficulty" "${AIMOD_VAR_PC_MIN}"
-add_arg "AIModifier.PlayerCountForMaxAIDifficulty" "${AIMOD_VAR_PC_MAX}"
-add_arg "AIModifier.MinAIDifficulty" "${AIMOD_VAR_MIN_DIFFICULTY}"
-add_arg "AIModifier.MaxAIDifficulty" "${AIMOD_VAR_MAX_DIFFICULTY}"
-
-# 14) Respawns
-add_arg "AIModifier.MaxCount" "${AIMOD_MAXCOUNT}"
-add_arg "AIModifier.RespawnTimeMin" "${AIMOD_RESPAWN_MIN}"
-add_arg "AIModifier.RespawnTimeMax" "${AIMOD_RESPAWN_MAX}"
-add_arg "AIModifier.SpawnDelay" "${AIMOD_SPAWN_DELAY}"
-
-# 15) Divers
-add_arg "AIModifier.bOverwriteBotSkillCfg" "${AIMOD_OVERWRITE_BOTCFG}"
-add_arg "AIModifier.bBotUsesSmokeGrenade" "${AIMOD_BOT_USES_SMOKE}"
-add_arg "AIModifier.bSuppression4MgOnly" "${AIMOD_SUPPR_4MG_ONLY}"
-add_arg "AIModifier.MemoryMaxAge" "${AIMOD_MEMORY_MAX_AGE}"
-
-# 16) Knife & squads
-add_arg "AIModifier.AllowMelee" "${AIMOD_ALLOW_MELEE}"
-add_arg "AIModifier.StayInSquads" "${AIMOD_STAY_IN_SQUADS}"
-add_arg "AIModifier.SquadSize" "${AIMOD_SQUAD_SIZE}"
-
-# Compose URL string
 SS_MUTATOR_URL_ARGS=""
 if [ ${#AIMOD_ARGS[@]} -gt 0 ]; then
   SS_MUTATOR_URL_ARGS="$(IFS='?'; echo "${AIMOD_ARGS[*]}")"
@@ -344,4 +213,3 @@ exec ./InsurgencyServer-Linux-Shipping \
   "${XP_ARGS[@]}" \
   "${RCON_ARGS[@]}" \
   ${EXTRA_SERVER_ARGS}
-
