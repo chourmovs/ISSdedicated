@@ -634,17 +634,22 @@ echo "📝 Writing Game.ini…"
 ; ------------------------------------------------------------------
 
 [/Script/Insurgency.INSGameMode]
-bKillFeed=${SS_KILL_FEED}
-bKillCamera=${SS_KILL_CAMERA}
-bVoiceEnabled=${SS_VOICE_ENABLED}
-FriendlyFireDamageScale=${SS_FRIENDLY_FIRE_SCALE}
-RoundTime=${SS_ROUND_TIME}
-PostRoundTime=${SS_POST_ROUND_TIME}
-bAllowVoting=${SS_VOTE_ENABLED}
-RequiredVotePercentage=${SS_VOTE_PERCENT}
-bDisableStats=$([ "${SS_ENABLE_STATS}" = "1" ] && echo "False" || echo "True")
-bUseMapCycle=True
+bKillFeed=%SS_KILL_FEED%
+bKillCamera=%SS_KILL_CAMERA%
+bVoiceEnabled=%SS_VOICE_ENABLED%
+FriendlyFireDamageScale=%SS_FRIENDLY_FIRE_SCALE%
+RoundTime=%SS_ROUND_TIME%
+PostRoundTime=%SS_POST_ROUND_TIME%
+bAllowVoting=%SS_VOTE_ENABLED%
+RequiredVotePercentage=%SS_VOTE_PERCENT%
+bDisableStats=%DISABLE_STATS%     
+
+[/Script/Insurgency.INSMultiplayerMode]
+; 🎯 Choisis l’un OU l’autre :
 bMapVoting=True
+bUseMapCycle=False
+
+
 EOF
 
   # Mods (Workshop) chargés globalement (filtrés)
