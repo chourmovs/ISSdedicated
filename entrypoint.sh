@@ -8,10 +8,16 @@
 # - MapCycle + déduction Asset depuis SCENARIO + anti-casse (fallback)
 # - Whitelists Mods/Mutators (bots-only)
 # - Bots en PvP garantis via INSMultiplayerMode + section de mode
-# - AUCUN PRESET FORCÉ (tout par ENV)
+# - Debug togglable: SS_DEBUG=1
 # ==================================================================
 
-set -eo pipefail
+# --- Debug/trap sûrs ---
+if [[ "${SS_DEBUG:-0}" == "1" ]]; then
+  PS4='+ ${BASH_SOURCE##*/}:${LINENO}: ${FUNCNAME[0]:+${FUNCNAME[0]}():} '
+  set -x
+fi
+set -Eeo pipefail
+trap 'rc=$?; echo "❌ Error (exit $rc) at line $LINENO: ${BASH_COMMAND}"; exit $rc' ERR
 
 # ─────────────────────────────────────────
 # 0) Variables / chemins (avec défauts)
@@ -38,7 +44,7 @@ SS_MAP="${SS_MAP:-Farmhouse}"           # informatif
 SS_SCENARIO="${SS_SCENARIO:-}"          # fallback plus bas
 SS_MAPCYCLE="${SS_MAPCYCLE:-}"          # multi-lignes possibles
 
-# Bots (valent pour Coop & Versus ; en PvP on écrit AUSSI dans INSMultiplayerMode)
+# Bots (Coop & Versus ; en PvP on écrit AUSSI dans INSMultiplayerMode)
 SS_BOTS_ENABLED="${SS_BOTS_ENABLED:-1}"
 SS_BOT_NUM="${SS_BOT_NUM:-8}"
 SS_BOT_QUOTA="${SS_BOT_QUOTA:-8}"
@@ -62,7 +68,7 @@ SS_VOTE_PERCENT="${SS_VOTE_PERCENT:-0.6}"
 SS_ENABLE_STATS="${SS_ENABLE_STATS:-1}"
 GSLT_TOKEN="${GSLT_TOKEN:-}"
 GAMESTATS_TOKEN="${GAMESTATS_TOKEN:-}"
-SS_ALLOW_MODS_WHEN_RANKED="${SS_ALLOW_MODS_WHEN_RANKED:-0}"  # 1 pour forcer mods même si tokens OK (non reco)
+SS_ALLOW_MODS_WHEN_RANKED="${SS_ALLOW_MODS_WHEN_RANKED:-0}"  # 1=autorise Mods/Mutators même en ranked (déconseillé)
 
 # Mods (Workshop) & Mutators
 SS_MODS="${SS_MODS:-}"                        # "1141916,12345"
@@ -74,7 +80,7 @@ SS_MUTATORS_PUSH="${SS_MUTATORS_PUSH:-}"
 SS_MUTATORS_FIREFIGHT="${SS_MUTATORS_FIREFIGHT:-}"
 SS_MUTATORS_DOMINATION="${SS_MUTATORS_DOMINATION:-}"
 
-# Compat rétro (certaines configs utilisaient "SS_MUTATORS")
+# Compat rétro
 SS_MUTATORS="${SS_MUTATORS:-}"
 if [[ -z "${SS_MUTATORS_SKIRMISH}" && -n "${SS_MUTATORS}" ]]; then
   SS_MUTATORS_SKIRMISH="${SS_MUTATORS}"
@@ -84,8 +90,6 @@ if [[ -z "${SS_MUTATORS_VERSUS}" && -n "${SS_MUTATORS}" ]]; then
 fi
 
 EXTRA_SERVER_ARGS="${EXTRA_SERVER_ARGS:-}"
-
-# Admins
 SS_ADMINS="${SS_ADMINS:-}"
 
 # Options
@@ -101,8 +105,7 @@ SS_ENFORCE_MODS_WHITELIST="${SS_ENFORCE_MODS_WHITELIST:-0}"
 # ─────────────────────────────────────────
 # AiModifier placeholders (TOUS optionnels)
 # ─────────────────────────────────────────
-# … (toutes les AIMOD_* variables identiques à ta version précédente)
-# (Je les garde ici pour compacité de la réponse)
+# (bloc complet – inchangé ; je laisse toutes les variables telles quelles)
 AIMOD_DIFFICULTY="${AIMOD_DIFFICULTY:-}"; AIMOD_ACCURACY="${AIMOD_ACCURACY:-}"; AIMOD_REACTION="${AIMOD_REACTION:-}"
 AIMOD_SIGHT_ALERT="${AIMOD_SIGHT_ALERT:-}"; AIMOD_SIGHT_IDLE="${AIMOD_SIGHT_IDLE:-}"; AIMOD_SIGHT_SMOKE="${AIMOD_SIGHT_SMOKE:-}"
 AIMOD_SIGHT_SMOKE_EYE="${AIMOD_SIGHT_SMOKE_EYE:-}"; AIMOD_SIGHT_SMOKE_EYE_FRAC="${AIMOD_SIGHT_SMOKE_EYE_FRAC:-}"
@@ -160,17 +163,13 @@ need_paths=(
   "${CFGDIR}"
 )
 for p in "${need_paths[@]}"; do
-  if [ ! -d "$p" ]; then
+  if [[ ! -d "$p" ]]; then
     echo "📁 Creating: $p"
-    mkdir -p "$p" || {
-      echo "❌ Permission denied creating: $p"
-      echo "   ➜ chown -R 1000:1000 ${GAMEDIR} /home/steam/Steam"
-      exit 1
-    }
+    mkdir -p "$p" || { echo "❌ Permission denied creating: $p"; echo "   ➜ chown -R 1000:1000 ${GAMEDIR} /home/steam/Steam"; exit 1; }
   fi
 done
 echo "🔏 FS write test..."
-echo "write-test" > "${GAMEDIR}/.writetest" || { echo "❌ Cannot write into ${GAMEDIR}"; exit 1; }
+echo "write-test" > "${GAMEDIR}/.writetest"
 rm -f "${GAMEDIR}/.writetest"
 echo "✅ FS OK"
 
@@ -182,18 +181,12 @@ ADMINSLIST_NAME="Admins"
 ADMINSLIST_PATH="${ADMINSDIR}/${ADMINSLIST_NAME}.txt"
 mkdir -p "${ADMINSDIR}"
 : > "${ADMINSLIST_PATH}"
-
-if [ -n "${SS_ADMINS}" ]; then
+if [[ -n "${SS_ADMINS}" ]]; then
   IFS=',' read -ra _admins <<< "${SS_ADMINS}"
   count=0
   for id in "${_admins[@]}"; do
     id_trim="$(echo "$id" | xargs)"
-    if [[ "$id_trim" =~ ^[0-9]{17}$ ]]; then
-      echo "$id_trim" >> "${ADMINSLIST_PATH}"
-      count=$((count+1))
-    else
-      echo "⚠️  Skipping invalid SteamID64: '${id_trim}'"
-    fi
+    if [[ "$id_trim" =~ ^[0-9]{17}$ ]]; then echo "$id_trim" >> "${ADMINSLIST_PATH}"; count=$((count+1)); else echo "⚠️  Skipping invalid SteamID64: '${id_trim}'"; fi
   done
   echo "   → ${count} admin(s) written."
 fi
@@ -201,7 +194,7 @@ fi
 # ─────────────────────────────────────────
 # 3) SteamCMD auto-update
 # ─────────────────────────────────────────
-if [ "${AUTO_UPDATE}" = "1" ]; then
+if [[ "${AUTO_UPDATE}" == "1" ]]; then
   echo "📥 Updating server via SteamCMD..."
   "${STEAMCMDDIR}/steamcmd.sh" +@sSteamCmdForcePlatformType linux \
       +force_install_dir "${GAMEDIR}" \
@@ -216,7 +209,7 @@ fi
 # 4) MapCycle.txt (si fourni)
 # ─────────────────────────────────────────
 echo "🗺️  Writing MapCycle (if any)..."
-if [ -n "${SS_MAPCYCLE}" ]; then
+if [[ -n "${SS_MAPCYCLE}" ]]; then
   echo "${SS_MAPCYCLE}" | tr '\r' '\n' | sed '/^\s*$/d' > "${MAPCYCLE}"
   lines="$(wc -l < "${MAPCYCLE}" | xargs || true)"
   echo "   → MapCycle written at ${MAPCYCLE} (${lines:-0} lines)"
@@ -246,53 +239,174 @@ echo "🎮 Default mode → ${SS_GAME_MODE} (${MODE_SECTION_DEF})"
 echo "🧩 Building AiModifier URL args from placeholders..."
 AIMOD_ARGS=()
 add_arg(){ local k="$1"; local v="$2"; [[ -n "${v:-}" ]] && AIMOD_ARGS+=("${k}=${v}"); }
-# (ajoute ici tous les add_arg comme dans ta version précédente) — conservés pour compacité
+# (ajouts exhaustifs — mêmes clés que ta version précédente)
 add_arg "AIModifier.Difficulty" "${AIMOD_DIFFICULTY}"
-# ... (tous les add_arg) ...
+add_arg "AIModifier.Accuracy" "${AIMOD_ACCURACY}"
+add_arg "AIModifier.ReactionTime" "${AIMOD_REACTION}"
+add_arg "AIModifier.SightRangeAlert" "${AIMOD_SIGHT_ALERT}"
+add_arg "AIModifier.SightRangeIdle" "${AIMOD_SIGHT_IDLE}"
+add_arg "AIModifier.SightRangeWithinSmokeGrenade" "${AIMOD_SIGHT_SMOKE}"
+add_arg "AIModifier.SightRangeWithinSmokeGrenadeEye" "${AIMOD_SIGHT_SMOKE_EYE}"
+add_arg "AIModifier.SightRangeSmokeEyeFrac" "${AIMOD_SIGHT_SMOKE_EYE_FRAC}"
+add_arg "AIModifier.MinLightIntensityToSeeTarget" "${AIMOD_MIN_LI_SEE}"
+add_arg "AIModifier.MinLightIntensitytoSeeTargetatNight" "${AIMOD_MIN_LI_NIGHT}"
+add_arg "AIModifier.LightIntensityforFullyVisibleTarget" "${AIMOD_LI_FULLY_VISIBLE}"
+add_arg "AIModifier.TimetoNoticeVisibilityMultiplier" "${AIMOD_TIME_NOTICE_VISIB_MULT}"
+add_arg "AIModifier.MinLightIntensitytoAffectNightVision" "${AIMOD_MIN_LI_AFFECT_NV}"
+add_arg "AIModifier.MinNightVisionSightStrength" "${AIMOD_MIN_NV_STRENGTH}"
+add_arg "AIModifier.ChanceSprintMultiplier" "${AIMOD_CH_SPRINT_MULT}"
+add_arg "AIModifier.ChanceMovingMultiplier" "${AIMOD_CH_MOVING_MULT}"
+add_arg "AIModifier.ChanceAtDistanceStanding" "${AIMOD_CH_STAND_DIST}"
+add_arg "AIModifier.ChanceAtCloseRangeStanding" "${AIMOD_CH_STAND_CLOSE}"
+add_arg "AIModifier.ChanceAtDistanceCrouched" "${AIMOD_CH_CROUCH_DIST}"
+add_arg "AIModifier.ChanceAtCloseRangeCrouched" "${AIMOD_CH_CROUCH_CLOSE}"
+add_arg "AIModifier.ChanceAtDistanceProne" "${AIMOD_CH_PRONE_DIST}"
+add_arg "AIModifier.ChanceAtCloseRangeProne" "${AIMOD_CH_PRONE_CLOSE}"
+add_arg "AIModifier.HearAwareDistanceRadial" "${AIMOD_HEAR_AWARE_RADIAL}"
+add_arg "AIModifier.HearAwareDistanceGunshot" "${AIMOD_HEAR_AWARE_GUNSHOT}"
+add_arg "AIModifier.HearAwareDistanceSprintFootstep" "${AIMOD_HEAR_AWARE_SPRINT}"
+add_arg "AIModifier.HearAwareDistanceFootsteps" "${AIMOD_HEAR_AWARE_FOOT}"
+add_arg "AIModifier.HearDistanceFootstepsSprinting" "${AIMOD_HEAR_DIST_SPRINT}"
+add_arg "AIModifier.HearDistanceFootstepsRunning" "${AIMOD_HEAR_DIST_RUN}"
+add_arg "AIModifier.HearAbilityZOffsetMin" "${AIMOD_HEAR_Z_MIN}"
+add_arg "AIModifier.HearAbilityZOffsetMax" "${AIMOD_HEAR_Z_MAX}"
+add_arg "AIModifier.FencedTargetHearAbilityModifier" "${AIMOD_HEAR_FENCED_MOD}"
+add_arg "AIModifier.TurnSpeedMaxAngleThreshold" "${AIMOD_TURNSPD_MAX_ANGLE_TH}"
+add_arg "AIModifier.TurnSpeedMinAngleThreshold" "${AIMOD_TURNSPD_MIN_ANGLE_TH}"
+add_arg "AIModifier.TurnSpeedMaxAngle" "${AIMOD_TURNSPD_MAX}"
+add_arg "AIModifier.TurnSpeedMinAngle" "${AIMOD_TURNSPD_MIN}"
+add_arg "AIModifier.TurnSpeedDistanceThreshold" "${AIMOD_TURNSPD_DIST_TH}"
+add_arg "AIModifier.TurnSpeedScaleModifierMax" "${AIMOD_TURNSPD_SCALE_MAX}"
+add_arg "AIModifier.TurnSpeedScaleModifierMin" "${AIMOD_TURNSPD_SCALE_MIN}"
+add_arg "AIModifier.AttackDelayClose" "${AIMOD_ATTACK_DELAY_CLOSE}"
+add_arg "AIModifier.AttackDelayDistant" "${AIMOD_ATTACK_DELAY_DIST}"
+add_arg "AIModifier.AttackDelayMelee" "${AIMOD_ATTACK_DELAY_MELEE}"
+add_arg "AIModifier.DistanceRange" "${AIMOD_DISTANCE_RANGE}"
+add_arg "AIModifier.CloseRange" "${AIMOD_CLOSE_RANGE}"
+add_arg "AIModifier.MiddleRange" "${AIMOD_MID_RANGE}"
+add_arg "AIModifier.FarRange" "${AIMOD_FAR_RANGE}"
+add_arg "AIModifier.MeleeRange" "${AIMOD_MELEE_RANGE}"
+add_arg "AIModifier.AccuracyMultiplier" "${AIMOD_ACCURACY_MULT}"
+add_arg "AIModifier.SuppressionAccuracyMultiplier" "${AIMOD_SUPPRESS_ACCURACY_MULT}"
+add_arg "AIModifier.NightAccuracyFactor" "${AIMOD_NIGHT_ACC_FACTOR}"
+add_arg "AIModifier.ZeroTimeMultiplierEasy" "${AIMOD_ZERO_TIME_EASY}"
+add_arg "AIModifier.ZeroTimeMultiplierMed" "${AIMOD_ZERO_TIME_MED}"
+add_arg "AIModifier.ZeroTimeMultiplierHard" "${AIMOD_ZERO_TIME_HARD}"
+add_arg "AIModifier.BloatBoxMultiplierEasy" "${AIMOD_BLOAT_MULT_EASY}"
+add_arg "AIModifier.BloatBoxMultiplierMed" "${AIMOD_BLOAT_MULT_MED}"
+add_arg "AIModifier.BloatBoxMultiplierHard" "${AIMOD_BLOAT_MULT_HARD}"
+add_arg "AIModifier.BloatBoxMultiplierDistance" "${AIMOD_BLOAT_DIST_MULT}"
+add_arg "AIModifier.BloatBoxMultiplierMaxDistance" "${AIMOD_BLOAT_MAX_DIST}"
+add_arg "AIModifier.BloatBoxMultiplierMinDistance" "${AIMOD_BLOAT_MIN_DIST}"
+add_arg "AIModifier.Chance2Cover" "${AIMOD_CHANCE_COVER}"
+add_arg "AIModifier.Chance2ImprovisedCover" "${AIMOD_CHANCE_COVER_IMPRO}"
+add_arg "AIModifier.Chance2CoverFar" "${AIMOD_CHANCE_COVER_FAR}"
+add_arg "AIModifier.MaxDistance2Cover" "${AIMOD_MAX_DIST_2COVER}"
+add_arg "AIModifier.Chance2Wander" "${AIMOD_CHANCE_WANDER}"
+add_arg "AIModifier.DefaultWanderDistance" "${AIMOD_DEF_WANDER_DIST}"
+add_arg "AIModifier.WanderDistanceMaxMultiplier" "${AIMOD_WANDER_DIST_MAX_MULT}"
+add_arg "AIModifier.Chance2Flank" "${AIMOD_CHANCE_FLANK}"
+add_arg "AIModifier.Chance2Rush" "${AIMOD_CHANCE_RUSH}"
+add_arg "AIModifier.Chance2Hunt" "${AIMOD_CHANCE_HUNT}"
+add_arg "AIModifier.Chance2ForceHunt" "${AIMOD_CHANCE_FORCE_HUNT}"
+add_arg "AIModifier.Chance2Regroup" "${AIMOD_CHANCE_REGROUP}"
+add_arg "AIModifier.bonusSpotLossStartingDistance" "${AIMOD_BONUS_SPOT_START}"
+add_arg "AIModifier.maxBonusSpotChanceHearing" "${AIMOD_MAX_BONUS_SPOT_HEAR}"
+add_arg "AIModifier.maxBonusSpotChanceAlert" "${AIMOD_MAX_BONUS_SPOT_ALERT}"
+add_arg "AIModifier.ChanceLeanMultiplier" "${AIMOD_CH_LEAN_MULT}"
+add_arg "AIModifier.minChance2Hear" "${AIMOD_MIN_CHANCE_HEAR}"
+add_arg "AIModifier.InjuredDmgThreshold" "${AIMOD_INJ_DMG_TH}"
+add_arg "AIModifier.InjuredHPRatioThreshold" "${AIMOD_INJ_HP_RATIO}"
+add_arg "AIModifier.DistanceNear2Objective" "${AIMOD_DIST_NEAR_OBJ}"
+add_arg "AIModifier.DistanceMid2Objective" "${AIMOD_DIST_MID_OBJ}"
+add_arg "AIModifier.DistanceFar2Objective" "${AIMOD_DIST_FAR_OBJ}"
+add_arg "AIModifier.ratioBotsClose2Objective" "${AIMOD_RATIO_BOTS_CLOSE_OBJ}"
+add_arg "AIModifier.minTime2StopFiringNLOS" "${AIMOD_STOP_FIRE_NLOS_MIN}"
+add_arg "AIModifier.maxTime2StopFiringNLOS" "${AIMOD_STOP_FIRE_NLOS_MAX}"
+add_arg "AIModifier.minSuppressionTime" "${AIMOD_SUPPR_TIME_MIN}"
+add_arg "AIModifier.maxSuppressionTime" "${AIMOD_SUPPR_TIME_MAX}"
+add_arg "AIModifier.SuppressionMinDistance" "${AIMOD_SUPPR_MIN_DIST}"
+add_arg "AIModifier.BaseChance2Suppress" "${AIMOD_SUPPR_BASE_CH}"
+add_arg "AIModifier.AddChance2SuppressPerFriend" "${AIMOD_SUPPR_ADD_FRIEND}"
+add_arg "AIModifier.ratioAimingHead2Body" "${AIMOD_HEAD2BODY_RATIO}"
+add_arg "AIModifier.ratioAimingHead2Body" "${AIMOD_RATIO_AIM_HEAD}"
+add_arg "AIModifier.PlayerCountForMinAIDifficulty" "${AIMOD_VAR_PC_MIN}"
+add_arg "AIModifier.PlayerCountForMaxAIDifficulty" "${AIMOD_VAR_PC_MAX}"
+add_arg "AIModifier.MinAIDifficulty" "${AIMOD_VAR_MIN_DIFFICULTY}"
+add_arg "AIModifier.MaxAIDifficulty" "${AIMOD_VAR_MAX_DIFFICULTY}"
+add_arg "AIModifier.MaxCount" "${AIMOD_MAXCOUNT}"
+add_arg "AIModifier.RespawnTimeMin" "${AIMOD_RESPAWN_MIN}"
+add_arg "AIModifier.RespawnTimeMax" "${AIMOD_RESPAWN_MAX}"
+add_arg "AIModifier.SpawnDelay" "${AIMOD_SPAWN_DELAY}"
+add_arg "AIModifier.bOverwriteBotSkillCfg" "${AIMOD_OVERWRITE_BOTCFG}"
+add_arg "AIModifier.bBotUsesSmokeGrenade" "${AIMOD_BOT_USES_SMOKE}"
+add_arg "AIModifier.bSuppression4MgOnly" "${AIMOD_SUPPR_4MG_ONLY}"
+add_arg "AIModifier.MemoryMaxAge" "${AIMOD_MEMORY_MAX_AGE}"
+add_arg "AIModifier.AllowMelee" "${AIMOD_ALLOW_MELEE}"
+add_arg "AIModifier.StayInSquads" "${AIMOD_STAY_IN_SQUADS}"
+add_arg "AIModifier.SquadSize" "${AIMOD_SQUAD_SIZE}"
+
 AIMOD_URL_ARGS=""
-if [ "${#AIMOD_ARGS[@]}" -gt 0 ]; then
-  AIMOD_URL_ARGS="$(printf '%s' "${AIMOD_ARGS[0]}")"
-  for ((i=1; i<${#AIMOD_ARGS[@]}; i++)); do AIMOD_URL_ARGS="${AIMOD_URL_ARGS}?${AIMOD_ARGS[$i]}"; done
+if [[ ${#AIMOD_ARGS[@]} -gt 0 ]]; then
+  AIMOD_URL_ARGS="${AIMOD_ARGS[0]}"
+  for ((i=1;i<${#AIMOD_ARGS[@]};i++)); do AIMOD_URL_ARGS="${AIMOD_URL_ARGS}?${AIMOD_ARGS[$i]}"; done
   echo "   → AiModifier URL args composed (${#AIMOD_ARGS[@]} keys). len=${#AIMOD_URL_ARGS}"
 else
   echo "   → No AIMOD_* placeholders provided."
 fi
 
 # ─────────────────────────────────────────
-# 6b) Whitelist Mods/Mutators (bots-only)
+# 6b) Whitelist Mods/Mutators (sans "declare -A")
 # ─────────────────────────────────────────
 filter_csv_by_whitelist() {
   local csv="$1" wl="$2"
   [[ -z "$csv" ]] && { echo ""; return; }
   [[ -z "$wl"  ]] && { echo "$csv"; return; }
-  IFS=',' read -ra items <<< "$csv"
+
+  # liste blanche normalisée en minuscule: ",aimodifier,headshotonly,"
+  local wl_norm=","
   IFS=',' read -ra allowed <<< "$wl"
-  declare -A allow
-  for ok in "${allowed[@]}"; do k="$(echo "$ok" | xargs | tr '[:upper:]' '[:lower:]')"; [[ -n "$k" ]] && allow["$k"]=1; done
-  out=()
+  for ok in "${allowed[@]}"; do
+    local k="$(echo "$ok" | xargs | tr '[:upper:]' '[:lower:]')"
+    [[ -n "$k" ]] && wl_norm+="${k},"
+  done
+
+  local out=()
+  IFS=',' read -ra items <<< "$csv"
   for it in "${items[@]}"; do
-    val="$(echo "$it" | xargs)"; key="$(echo "$val" | tr '[:upper:]' '[:lower:]')"
-    if [[ -n "$val" && -n "${allow[$key]:-}" ]]; then out+=("$val"); else [[ -n "$val" ]] && echo "🚫 filtered out (not whitelisted): '$val'" >&2; fi
+    local val="$(echo "$it" | xargs)"
+    [[ -z "$val" ]] && continue
+    local key="$(echo "$val" | tr '[:upper:]' '[:lower:]')"
+    if [[ "$wl_norm" == *",$key,"* ]]; then
+      out+=("$val")
+    else
+      echo "🚫 filtered out (not whitelisted): '$val'" >&2
+    fi
   done
   (IFS=','; echo "${out[*]}")
 }
+
 ACTIVE_MUTATORS_SKIRMISH="${SS_MUTATORS_SKIRMISH}"
 [[ "${SS_ENFORCE_MUTATOR_WHITELIST}" == "1" ]] && ACTIVE_MUTATORS_SKIRMISH="$(filter_csv_by_whitelist "${SS_MUTATORS_SKIRMISH}" "${SS_MUTATOR_WHITELIST}")"
+
 ACTIVE_MODS="${SS_MODS}"
-if [[ "${SS_ENFORCE_MODS_WHITELIST}" == "1" && -n "${SS_MODS_WHITELIST}" ]]; then ACTIVE_MODS="$(filter_csv_by_whitelist "${SS_MODS}" "${SS_MODS_WHITELIST}")"; fi
+if [[ "${SS_ENFORCE_MODS_WHITELIST}" == "1" && -n "${SS_MODS_WHITELIST}" ]]; then
+  ACTIVE_MODS="$(filter_csv_by_whitelist "${SS_MODS}" "${SS_MODS_WHITELIST}")"
+fi
+
 ACTIVE_MUTATORS_VERSUS="$(filter_csv_by_whitelist "${SS_MUTATORS_VERSUS}"     "${SS_MUTATOR_WHITELIST}")"
 ACTIVE_MUTATORS_PUSH="$(filter_csv_by_whitelist    "${SS_MUTATORS_PUSH}"       "${SS_MUTATOR_WHITELIST}")"
 ACTIVE_MUTATORS_FIREFIGHT="$(filter_csv_by_whitelist "${SS_MUTATORS_FIREFIGHT}" "${SS_MUTATOR_WHITELIST}")"
 ACTIVE_MUTATORS_DOMINATION="$(filter_csv_by_whitelist "${SS_MUTATORS_DOMINATION}" "${SS_MUTATOR_WHITELIST}")"
 
-combine_csv(){ local a="$1" b="$2"; [[ -n "$a" && -n "$b" ]] && echo "$a,$b" || echo "${a}${b}"; }
+combine_csv(){ local a="$1" b="$2"; if [[ -n "$a" && -n "$b" ]]; then echo "$a,$b"; else echo "${a}${b}"; fi; }
 COMBINED_MUTATORS_PUSH="$(combine_csv "${ACTIVE_MUTATORS_VERSUS}" "${ACTIVE_MUTATORS_PUSH}")"
 COMBINED_MUTATORS_FIREFIGHT="$(combine_csv "${ACTIVE_MUTATORS_VERSUS}" "${ACTIVE_MUTATORS_FIREFIGHT}")"
 COMBINED_MUTATORS_DOMINATION="$(combine_csv "${ACTIVE_MUTATORS_VERSUS}" "${ACTIVE_MUTATORS_DOMINATION}")"
 COMBINED_MUTATORS_SKIRMISH="$(combine_csv "${ACTIVE_MUTATORS_VERSUS}" "${ACTIVE_MUTATORS_SKIRMISH}")"
 
 # ─────────────────────────────────────────
-# 7) Validation “anti-casse” des scénarios + fallback
+# 7) Validation “anti-casse” des scénarios + fallback (sans assoc arrays)
 # ─────────────────────────────────────────
 if [[ -z "${SS_SCENARIO}" || ! "${SS_SCENARIO}" =~ ^Scenario_ ]]; then
   echo "⚠️  SS_SCENARIO invalide/absent → fallback 'Scenario_Farmhouse_Checkpoint_Security'"
@@ -303,34 +417,42 @@ scenario_mode="$(printf '%s' "${SS_SCENARIO}" | awk -F'_' '{print $(NF-1)}' | tr
 scenario_team="$(printf '%s' "${SS_SCENARIO}" | awk -F'_' '{print $NF}')"
 [[ -z "${scenario_team}" ]] && scenario_team="Security"
 
-declare -A OK_SKIRMISH=([Crossing]=1 [Farmhouse]=1 [Refinery]=1 [Hideout]=1 [Summit]=1 [Hillside]=1)
-declare -A OK_PUSH=([Crossing]=1 [Farmhouse]=1 [Refinery]=1 [Hideout]=1 [Summit]=1 [Hillside]=1 [Precinct]=1 [Ministry]=1 [PowerPlant]=1 [Outskirts]=1)
-declare -A OK_FIREFIGHT=([Crossing]=1 [Farmhouse]=1 [Refinery]=1 [Hideout]=1 [Summit]=1 [Hillside]=1 [Precinct]=1 [Ministry]=1)
-declare -A OK_DOMINATION=([Crossing]=1 [Farmhouse]=1 [Hideout]=1 [Summit]=1 [Precinct]=1 [Ministry]=1)
-declare -A OK_CHECKPOINT=([Crossing]=1 [Farmhouse]=1 [Refinery]=1 [Hideout]=1 [Summit]=1 [Hillside]=1 [Precinct]=1 [Ministry]=1 [Outskirts]=1 [PowerPlant]=1)
-declare -A OK_OUTPOST=([Crossing]=1 [Farmhouse]=1 [Refinery]=1 [Hideout]=1 [Summit]=1 [Hillside]=1)
-declare -A OK_SURVIVAL=([Crossing]=1 [Farmhouse]=1 [Hideout]=1 [Summit]=1)
+OK_SKIRMISH="Crossing Farmhouse Refinery Hideout Summit Hillside"
+OK_PUSH="Crossing Farmhouse Refinery Hideout Summit Hillside Precinct Ministry PowerPlant Outskirts"
+OK_FIREFIGHT="Crossing Farmhouse Refinery Hideout Summit Hillside Precinct Ministry"
+OK_DOMINATION="Crossing Farmhouse Hideout Summit Precinct Ministry"
+OK_CHECKPOINT="Crossing Farmhouse Refinery Hideout Summit Hillside Precinct Ministry Outskirts PowerPlant"
+OK_OUTPOST="Crossing Farmhouse Refinery Hideout Summit Hillside"
+OK_SURVIVAL="Crossing Farmhouse Hideout Summit"
 
-fallback_for_mode(){ case "$1" in
-  SKIRMISH|PUSH|OUTPOST) echo "Crossing" ;;
-  FIREFIGHT|SURVIVAL) echo "Farmhouse" ;;
-  DOMINATION) echo "Precinct" ;;
-  CHECKPOINT) echo "Farmhouse" ;;
-  *) echo "Crossing" ;; esac; }
+list_contains(){ local list="$1" item="$2"; for w in $list; do [[ "$w" == "$item" ]] && return 0; done; return 1; }
+
+fallback_for_mode(){
+  case "$1" in
+    SKIRMISH|PUSH|OUTPOST) echo "Crossing" ;;
+    FIREFIGHT|SURVIVAL)    echo "Farmhouse" ;;
+    DOMINATION)            echo "Precinct"  ;;
+    CHECKPOINT)            echo "Farmhouse" ;;
+    *)                     echo "Crossing"  ;;
+  esac
+}
 is_ok_for_mode(){
   local mode="$1" core="$2"
-  if [[ "${SS_FORCE_COOP_ONLY:-0}" == "1" ]]; then case "$mode" in CHECKPOINT|OUTPOST|SURVIVAL) : ;; *) return 1 ;; esac; fi
+  if [[ "${SS_FORCE_COOP_ONLY:-0}" == "1" ]]; then
+    case "$mode" in CHECKPOINT|OUTPOST|SURVIVAL) : ;; *) return 1 ;; esac
+  fi
   case "$mode" in
-    SKIRMISH)   [[ -n "${OK_SKIRMISH[$core]:-}"   ]] ;;
-    PUSH)       [[ -n "${OK_PUSH[$core]:-}"       ]] ;;
-    FIREFIGHT)  [[ -n "${OK_FIREFIGHT[$core]:-}"  ]] ;;
-    DOMINATION) [[ -n "${OK_DOMINATION[$core]:-}" ]] ;;
-    CHECKPOINT) [[ -n "${OK_CHECKPOINT[$core]:-}" ]] ;;
-    OUTPOST)    [[ -n "${OK_OUTPOST[$core]:-}"    ]] ;;
-    SURVIVAL)   [[ -n "${OK_SURVIVAL[$core]:-}"   ]] ;;
+    SKIRMISH)   list_contains "$OK_SKIRMISH"   "$core" ;;
+    PUSH)       list_contains "$OK_PUSH"       "$core" ;;
+    FIREFIGHT)  list_contains "$OK_FIREFIGHT"  "$core" ;;
+    DOMINATION) list_contains "$OK_DOMINATION" "$core" ;;
+    CHECKPOINT) list_contains "$OK_CHECKPOINT" "$core" ;;
+    OUTPOST)    list_contains "$OK_OUTPOST"    "$core" ;;
+    SURVIVAL)   list_contains "$OK_SURVIVAL"   "$core" ;;
     *)          return 1 ;;
   esac
 }
+
 if ! is_ok_for_mode "${scenario_mode}" "${scenario_core}"; then
   echo "⚠️  '${scenario_core}' ne supporte pas '${scenario_mode}' → fallback"
   scenario_core="$(fallback_for_mode "${scenario_mode}")"
@@ -364,12 +486,12 @@ fi
 
 echo "🧭 Scenario validé → '${SS_SCENARIO}' | Asset='${MAP_ASSET}' | MODE='${scenario_mode}'"
 
-# (Optionnel) Nettoyage MapCycle — **FIX: suppression du '}' parasite**
+# (Optionnel) Nettoyage MapCycle (FIX: plus de '}' parasite)
 if [[ "${SS_VALIDATE_MAPCYCLE:-0}" == "1" && -s "${MAPCYCLE}" ]]; then
   echo "🧹 Validation MapCycle (SS_VALIDATE_MAPCYCLE=1)…"
   tmp_mc="${MAPCYCLE}.validated"
   : > "${tmp_mc}"
-  while IFS= read -r line || [ -n "$line" ]; do
+  while IFS= read -r line || [[ -n "$line" ]]; do
     ltrim="$(echo "$line" | xargs)"
     [[ -z "$ltrim" ]] && continue
     if [[ ! "$ltrim" =~ ^Scenario_ ]]; then
@@ -393,16 +515,16 @@ fi
 # 7.5) Détection XP (ranked)
 # ─────────────────────────────────────────
 XP_ENABLED=0
-if [ -n "${GSLT_TOKEN}" ] && [ -n "${GAMESTATS_TOKEN}" ] && [ -z "${RCON_PASSWORD}" ]; then
+if [[ -n "${GSLT_TOKEN}" && -n "${GAMESTATS_TOKEN}" && -z "${RCON_PASSWORD}" ]]; then
   XP_ENABLED=1
 fi
-if [ "${XP_ENABLED}" = "1" ]; then
+if [[ "${XP_ENABLED}" == "1" ]]; then
   echo "✨ XP condition met (tokens present & RCON empty)."
 else
   echo "ℹ️  XP disabled (missing tokens or RCON set)."
-  [ -z "${GSLT_TOKEN}" ] && echo "   ↳ GSLT_TOKEN missing."
-  [ -z "${GAMESTATS_TOKEN}" ] && echo "   ↳ GAMESTATS_TOKEN missing."
-  [ -n "${RCON_PASSWORD}" ] && echo "   ↳ RCON_PASSWORD is set (must be empty for XP)."
+  [[ -z "${GSLT_TOKEN}" ]] && echo "   ↳ GSLT_TOKEN missing."
+  [[ -z "${GAMESTATS_TOKEN}" ]] && echo "   ↳ GAMESTATS_TOKEN missing."
+  [[ -n "${RCON_PASSWORD}" ]] && echo "   ↳ RCON_PASSWORD is set (must be empty for XP)."
 fi
 
 # ─────────────────────────────────────────
@@ -440,13 +562,10 @@ BotDifficulty=${SS_BOT_DIFFICULTY}
 EOF
 
   # Mods (Workshop) — interdits en ranked, sauf override explicite
-  if [ "${XP_ENABLED}" != "1" ] || [ "${SS_ALLOW_MODS_WHEN_RANKED}" = "1" ]; then
-    if [ -n "${ACTIVE_MODS}" ]; then
+  if [[ "${XP_ENABLED}" != "1" || "${SS_ALLOW_MODS_WHEN_RANKED}" == "1" ]]; then
+    if [[ -n "${ACTIVE_MODS}" ]]; then
       IFS=',' read -ra _mods <<< "${ACTIVE_MODS}"
-      for mid in "${_mods[@]}"; do
-        mid_trim="$(echo "$mid" | xargs)"
-        [ -n "$mid_trim" ] && echo "Mods=${mid_trim}"
-      done
+      for mid in "${_mods[@]}"; do mid_trim="$(echo "$mid" | xargs)"; [[ -n "$mid_trim" ]] && echo "Mods=${mid_trim}"; done
     fi
   else
     echo "; Ranked: Mods omitted to preserve global XP"
@@ -476,7 +595,7 @@ EOF
 EOF
   else
     # PvP + Coop : mutators par mode si autorisés
-    if [ "${XP_ENABLED}" != "1" ] || [ "${SS_ALLOW_MODS_WHEN_RANKED}" = "1" ]; then
+    if [[ "${XP_ENABLED}" != "1" || "${SS_ALLOW_MODS_WHEN_RANKED}" == "1" ]]; then
       echo
       echo "[/Script/Insurgency.INSPushGameMode]"
       [[ -n "${COMBINED_MUTATORS_PUSH}" ]] && echo "Mutators=${COMBINED_MUTATORS_PUSH}"
@@ -526,7 +645,7 @@ case "${scenario_mode}" in
   SKIRMISH)   current_mut="${COMBINED_MUTATORS_SKIRMISH}" ;;
   *)          current_mut="" ;;
 esac
-if [[ ( "${XP_ENABLED}" != "1" || "${SS_ALLOW_MODS_WHEN_RANKED}" = "1" ) && -n "${AIMOD_URL_ARGS}" && -n "${current_mut}" && "${current_mut}" =~ (^|,)[[:space:]]*AiModifier([[:space:]]*,|$) ]]; then
+if [[ ( "${XP_ENABLED}" != "1" || "${SS_ALLOW_MODS_WHEN_RANKED}" == "1" ) && -n "${AIMOD_URL_ARGS}" && -n "${current_mut}" && "${current_mut}" =~ (^|,)[[:space:]]*AiModifier([[:space:]]*,|$) ]]; then
   LAUNCH_URL="${LAUNCH_URL}?Mutators=AiModifier?${AIMOD_URL_ARGS}"
 fi
 echo "▶️  Launch URL: ${LAUNCH_URL}"
@@ -535,7 +654,7 @@ echo "▶️  Launch URL: ${LAUNCH_URL}"
 # 10) XP flags (lancement)
 # ─────────────────────────────────────────
 XP_ARGS=()
-if [ "${XP_ENABLED}" = "1" ]; then
+if [[ "${XP_ENABLED}" == "1" ]]; then
   XP_ARGS+=( "-GSLTToken=${GSLT_TOKEN}" "-GameStatsToken=${GAMESTATS_TOKEN}" )
   echo "✅ Passing ranked tokens to server."
 fi
@@ -543,10 +662,9 @@ fi
 # ─────────────────────────────────────────
 # 11) Démarrage serveur
 # ─────────────────────────────────────────
-cd "${GAMEDIR}/Insurgency/Binaries/Linux" || { echo "❌ Cannot cd to ${GAMEDIR}/Insurgency/Binaries/Linux"; exit 1; }
-
+cd "${GAMEDIR}/Insurgency/Binaries/Linux"
 # Ajoute -MapCycle si disponible
-if [ -s "${MAPCYCLE}" ]; then
+if [[ -s "${MAPCYCLE}" ]]; then
   EXTRA_SERVER_ARGS="${EXTRA_SERVER_ARGS} -MapCycle=$(basename "${MAPCYCLE}")"
 fi
 
@@ -558,9 +676,7 @@ echo "    Extra args: '${EXTRA_SERVER_ARGS}'"
 echo "────────────────────────────────────────────────────────"
 
 RCON_ARGS=()
-if [ -n "${RCON_PASSWORD}" ]; then
-  RCON_ARGS+=("-Rcon" "-RconPassword=${RCON_PASSWORD}")
-fi
+[[ -n "${RCON_PASSWORD}" ]] && RCON_ARGS+=("-Rcon" "-RconPassword=${RCON_PASSWORD}")
 
 exec ./InsurgencyServer-Linux-Shipping \
   "${LAUNCH_URL}" \
