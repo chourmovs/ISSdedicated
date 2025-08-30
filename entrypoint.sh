@@ -338,4 +338,366 @@ add_arg "AIModifier.PlayerCountForMinAIDifficulty" "${AIMOD_VAR_PC_MIN}"
 add_arg "AIModifier.PlayerCountForMaxAIDifficulty" "${AIMOD_VAR_PC_MAX}"
 add_arg "AIModifier.MinAIDifficulty" "${AIMOD_VAR_MIN_DIFFICULTY}"
 add_arg "AIModifier.MaxAIDifficulty" "${AIMOD_VAR_MAX_DIFFICULTY}"
-add_arg "AIModi
+add_arg "AIModifier.MaxCount" "${AIMOD_MAXCOUNT}"
+add_arg "AIModifier.RespawnTimeMin" "${AIMOD_RESPAWN_MIN}"
+add_arg "AIModifier.RespawnTimeMax" "${AIMOD_RESPAWN_MAX}"
+add_arg "AIModifier.SpawnDelay" "${AIMOD_SPAWN_DELAY}"
+add_arg "AIModifier.bOverwriteBotSkillCfg" "${AIMOD_OVERWRITE_BOTCFG}"
+add_arg "AIModifier.bBotUsesSmokeGrenade" "${AIMOD_BOT_USES_SMOKE}"
+add_arg "AIModifier.bSuppression4MgOnly" "${AIMOD_SUPPR_4MG_ONLY}"
+add_arg "AIModifier.MemoryMaxAge" "${AIMOD_MEMORY_MAX_AGE}"
+add_arg "AIModifier.AllowMelee" "${AIMOD_ALLOW_MELEE}"
+add_arg "AIModifier.StayInSquads" "${AIMOD_STAY_IN_SQUADS}"
+add_arg "AIModifier.SquadSize" "${AIMOD_SQUAD_SIZE}"
+
+AIMOD_URL_ARGS=""
+if [ ${#AIMOD_ARGS[@]} -gt 0 ]; then
+  AIMOD_URL_ARGS="${AIMOD_ARGS[0]}"
+  for ((i=1;i<${#AIMOD_ARGS[@]};i++)); do AIMOD_URL_ARGS="${AIMOD_URL_ARGS}?${AIMOD_ARGS[$i]}"; done
+  echo "   → AiModifier URL args composed (${#AIMOD_ARGS[@]} keys). len=${#AIMOD_URL_ARGS}"
+else
+  echo "   → No AIMOD_* placeholders provided."
+fi
+
+# ─────────────────────────────────────────
+# 6b) Whitelist Mods/Mutators (sans tableaux associatifs)
+# ─────────────────────────────────────────
+filter_csv_by_whitelist() {
+  local csv="$1" wl="$2"
+  [ -z "$csv" ] && { echo ""; return; }
+  [ -z "$wl"  ] && { echo "$csv"; return; }
+
+  # liste blanche normalisée en minuscule: ",aimodifier,headshotonly,"
+  local wl_norm=","
+  IFS=',' read -ra allowed <<< "$wl"
+  for ok in "${allowed[@]}"; do
+    local k="$(echo "$ok" | xargs | tr '[:upper:]' '[:lower:]')"
+    [ -n "$k" ] && wl_norm+="${k},"
+  done
+
+  local out=()
+  IFS=',' read -ra items <<< "$csv"
+  for it in "${items[@]}"; do
+    local val="$(echo "$it" | xargs)"
+    [ -z "$val" ] && continue
+    local key="$(echo "$val" | tr '[:upper:]' '[:lower:]')"
+    if [[ "$wl_norm" == *",$key,"* ]]; then
+      out+=("$val")
+    else
+      echo "🚫 filtered out (not whitelisted): '$val'" >&2
+    fi
+  done
+  (IFS=','; echo "${out[*]}")
+}
+
+ACTIVE_MUTATORS_SKIRMISH="${SS_MUTATORS_SKIRMISH}"
+if [ "${SS_ENFORCE_MUTATOR_WHITELIST}" = "1" ]; then
+  ACTIVE_MUTATORS_SKIRMISH="$(filter_csv_by_whitelist "${SS_MUTATORS_SKIRMISH}" "${SS_MUTATOR_WHITELIST}")"
+fi
+
+ACTIVE_MODS="${SS_MODS}"
+if [ "${SS_ENFORCE_MODS_WHITELIST}" = "1" ] && [ -n "${SS_MODS_WHITELIST}" ]; then
+  ACTIVE_MODS="$(filter_csv_by_whitelist "${SS_MODS}" "${SS_MODS_WHITELIST}")"
+fi
+
+ACTIVE_MUTATORS_VERSUS="$(filter_csv_by_whitelist "${SS_MUTATORS_VERSUS}"     "${SS_MUTATOR_WHITELIST}")"
+ACTIVE_MUTATORS_PUSH="$(filter_csv_by_whitelist    "${SS_MUTATORS_PUSH}"       "${SS_MUTATOR_WHITELIST}")"
+ACTIVE_MUTATORS_FIREFIGHT="$(filter_csv_by_whitelist "${SS_MUTATORS_FIREFIGHT}" "${SS_MUTATOR_WHITELIST}")"
+ACTIVE_MUTATORS_DOMINATION="$(filter_csv_by_whitelist "${SS_MUTATORS_DOMINATION}" "${SS_MUTATOR_WHITELIST}")"
+
+combine_csv(){ local a="$1" b="$2"; if [ -n "$a" ] && [ -n "$b" ]; then echo "$a,$b"; else echo "${a}${b}"; fi; }
+COMBINED_MUTATORS_PUSH="$(combine_csv "${ACTIVE_MUTATORS_VERSUS}" "${ACTIVE_MUTATORS_PUSH}")"
+COMBINED_MUTATORS_FIREFIGHT="$(combine_csv "${ACTIVE_MUTATORS_VERSUS}" "${ACTIVE_MUTATORS_FIREFIGHT}")"
+COMBINED_MUTATORS_DOMINATION="$(combine_csv "${ACTIVE_MUTATORS_VERSUS}" "${ACTIVE_MUTATORS_DOMINATION}")"
+COMBINED_MUTATORS_SKIRMISH="$(combine_csv "${ACTIVE_MUTATORS_VERSUS}" "${ACTIVE_MUTATORS_SKIRMISH}")"
+
+# ─────────────────────────────────────────
+# 7) Validation “anti-casse” des scénarios + fallback (sans assoc arrays)
+# ─────────────────────────────────────────
+if [ -z "${SS_SCENARIO}" ] || [[ ! "${SS_SCENARIO}" =~ ^Scenario_ ]]; then
+  echo "⚠️  SS_SCENARIO invalide/absent → fallback 'Scenario_Farmhouse_Checkpoint_Security'"
+  SS_SCENARIO="Scenario_Farmhouse_Checkpoint_Security"
+fi
+scenario_core="$(printf '%s' "${SS_SCENARIO#Scenario_}" | cut -d'_' -f1)"
+scenario_mode="$(printf '%s' "${SS_SCENARIO}" | awk -F'_' '{print $(NF-1)}' | tr '[:lower:]' '[:upper:]')"
+scenario_team="$(printf '%s' "${SS_SCENARIO}" | awk -F'_' '{print $NF}')"
+[ -z "${scenario_team}" ] && scenario_team="Security"
+
+OK_SKIRMISH="Crossing Farmhouse Refinery Hideout Summit Hillside"
+OK_PUSH="Crossing Farmhouse Refinery Hideout Summit Hillside Precinct Ministry PowerPlant Outskirts"
+OK_FIREFIGHT="Crossing Farmhouse Refinery Hideout Summit Hillside Precinct Ministry"
+OK_DOMINATION="Crossing Farmhouse Hideout Summit Precinct Ministry"
+OK_CHECKPOINT="Crossing Farmhouse Refinery Hideout Summit Hillside Precinct Ministry Outskirts PowerPlant"
+OK_OUTPOST="Crossing Farmhouse Refinery Hideout Summit Hillside"
+OK_SURVIVAL="Crossing Farmhouse Hideout Summit"
+
+list_contains(){ local list="$1" item="$2"; for w in $list; do [ "$w" = "$item" ] && return 0; done; return 1; }
+
+fallback_for_mode(){
+  case "$1" in
+    SKIRMISH|PUSH|OUTPOST) echo "Crossing" ;;
+    FIREFIGHT|SURVIVAL)    echo "Farmhouse" ;;
+    DOMINATION)            echo "Precinct"  ;;
+    CHECKPOINT)            echo "Farmhouse" ;;
+    *)                     echo "Crossing"  ;;
+  esac
+}
+is_ok_for_mode(){
+  local mode="$1" core="$2"
+  if [ "${SS_FORCE_COOP_ONLY:-0}" = "1" ]; then
+    case "$mode" in CHECKPOINT|OUTPOST|SURVIVAL) : ;; *) return 1 ;; esac
+  fi
+  case "$mode" in
+    SKIRMISH)   list_contains "$OK_SKIRMISH"   "$core" ;;
+    PUSH)       list_contains "$OK_PUSH"       "$core" ;;
+    FIREFIGHT)  list_contains "$OK_FIREFIGHT"  "$core" ;;
+    DOMINATION) list_contains "$OK_DOMINATION" "$core" ;;
+    CHECKPOINT) list_contains "$OK_CHECKPOINT" "$core" ;;
+    OUTPOST)    list_contains "$OK_OUTPOST"    "$core" ;;
+    SURVIVAL)   list_contains "$OK_SURVIVAL"   "$core" ;;
+    *)          return 1 ;;
+  esac
+}
+
+if ! is_ok_for_mode "${scenario_mode}" "${scenario_core}"; then
+  echo "⚠️  '${scenario_core}' ne supporte pas '${scenario_mode}' → fallback"
+  scenario_core="$(fallback_for_mode "${scenario_mode}")"
+  SS_SCENARIO="Scenario_${scenario_core}_${scenario_mode^}_${scenario_team}"
+fi
+
+case "${scenario_core}" in
+  Crossing) MAP_ASSET="Canyon" ;;
+  Hideout)  MAP_ASSET="Town" ;;
+  Hillside) MAP_ASSET="Sinjar" ;;
+  Refinery) MAP_ASSET="Oilfield" ;;
+  *)        MAP_ASSET="${scenario_core}" ;;
+esac
+
+case "${scenario_mode}" in
+  PUSH)        MODE_SECTION="/Script/Insurgency.INSPushGameMode" ;;
+  FIREFIGHT)   MODE_SECTION="/Script/Insurgency.INSFirefightGameMode" ;;
+  SKIRMISH)    MODE_SECTION="/Script/Insurgency.INSSkirmishGameMode" ;;
+  DOMINATION)  MODE_SECTION="/Script/Insurgency.INSDominationGameMode" ;;
+  CHECKPOINT)  MODE_SECTION="/Script/Insurgency.INSCheckpointGameMode" ;;
+  OUTPOST)     MODE_SECTION="/Script/Insurgency.INSOutpostGameMode" ;;
+  SURVIVAL)    MODE_SECTION="/Script/Insurgency.INSSurvivalGameMode" ;;
+  *)           MODE_SECTION="${MODE_SECTION_DEF}" ; scenario_mode="$(echo "${SS_GAME_MODE}" | tr '[:lower:]' '[:upper:]')" ;;
+esac
+
+if [ "${scenario_mode}" = "CHECKPOINT" ] || [ "${scenario_mode}" = "OUTPOST" ] || [ "${scenario_mode}" = "SURVIVAL" ]; then
+  RULES_SECTION="/Script/Insurgency.INSCoopMode"
+else
+  RULES_SECTION="/Script/Insurgency.INSMultiplayerMode"
+fi
+
+echo "🧭 Scenario validé → '${SS_SCENARIO}' | Asset='${MAP_ASSET}' | MODE='${scenario_mode}'"
+
+# (Optionnel) Nettoyage MapCycle
+if [ "${SS_VALIDATE_MAPCYCLE:-0}" = "1" ] && [ -s "${MAPCYCLE}" ]; then
+  echo "🧹 Validation MapCycle (SS_VALIDATE_MAPCYCLE=1)…"
+  tmp_mc="${MAPCYCLE}.validated"
+  : > "${tmp_mc}"
+  while IFS= read -r line || [ -n "$line" ]; do
+    ltrim="$(echo "$line" | xargs)"
+    [ -z "$ltrim" ] && continue
+    if [[ ! "$ltrim" =~ ^Scenario_ ]]; then
+      echo "   ✗ Ignore (format) : $ltrim"
+      continue
+    fi
+    core="$(printf '%s' "${ltrim#Scenario_}" | cut -d'_' -f1)"
+    mode="$(printf '%s' "${ltrim}" | awk -F'_' '{print $(NF-1)}' | tr '[:lower:]' '[:upper:]')"
+    if is_ok_for_mode "${mode}" "${core}"; then
+      echo "$ltrim" >> "${tmp_mc}"
+      echo "   ✓ OK : $ltrim"
+    else
+      echo "   ✗ Remove (incompatible ${mode}) : $ltrim"
+    fi
+  done < "${MAPCYCLE}"
+  mv -f "${tmp_mc}" "${MAPCYCLE}"
+  echo "   → MapCycle nettoyé."
+fi
+
+# ─────────────────────────────────────────
+# 7.5) Détection XP (ranked)
+# ─────────────────────────────────────────
+XP_ENABLED=0
+if [ -n "${GSLT_TOKEN}" ] && [ -n "${GAMESTATS_TOKEN}" ] && [ -z "${RCON_PASSWORD}" ]; then
+  XP_ENABLED=1
+fi
+if [ "${XP_ENABLED}" = "1" ]; then
+  echo "✨ XP condition met (tokens present & RCON empty)."
+else
+  echo "ℹ️  XP disabled (missing tokens or RCON set)."
+  [ -z "${GSLT_TOKEN}" ] && echo "   ↳ GSLT_TOKEN missing."
+  [ -z "${GAMESTATS_TOKEN}" ] && echo "   ↳ GAMESTATS_TOKEN missing."
+  [ -n "${RCON_PASSWORD}" ] && echo "   ↳ RCON_PASSWORD is set (must be empty for XP)."
+fi
+
+# ─────────────────────────────────────────
+# 8) Écriture Game.ini (server-driven)
+# ─────────────────────────────────────────
+echo "📝 Writing Game.ini…"
+{
+  cat <<EOF
+; ------------------------------------------------------------------
+; Insurgency Sandstorm - Game.ini (server-driven)
+; ------------------------------------------------------------------
+
+[/Script/Insurgency.INSGameMode]
+bKillFeed=${SS_KILL_FEED}
+bKillCamera=${SS_KILL_CAMERA}
+bVoiceEnabled=${SS_VOICE_ENABLED}
+FriendlyFireDamageScale=${SS_FRIENDLY_FIRE_SCALE}
+RoundTime=${SS_ROUND_TIME}
+PostRoundTime=${SS_POST_ROUND_TIME}
+bAllowVoting=${SS_VOTE_ENABLED}
+RequiredVotePercentage=${SS_VOTE_PERCENT}
+bDisableStats=$([ "${SS_ENABLE_STATS}" = "1" ] && echo "False" || echo "True")
+bUseMapCycle=True
+bMapVoting=True
+
+[/Script/Insurgency.INSMultiplayerMode]
+; 🎯 Choisis l’un OU l’autre :
+bMapVoting=True
+bUseMapCycle=True
+; Bots PvP globaux (garantit des bots en Push/FF/Dom)
+bBots=${SS_BOTS_ENABLED}
+NumBots=${SS_BOT_NUM}
+BotQuota=${SS_BOT_QUOTA}
+BotDifficulty=${SS_BOT_DIFFICULTY}
+EOF
+
+  # Mods (Workshop) — interdits en ranked, sauf override explicite
+  if [ "${XP_ENABLED}" != "1" ] || [ "${SS_ALLOW_MODS_WHEN_RANKED}" = "1" ]; then
+    if [ -n "${ACTIVE_MODS}" ]; then
+      IFS=',' read -ra _mods <<< "${ACTIVE_MODS}"
+      for mid in "${_mods[@]}"; do
+        mid_trim="$(echo "$mid" | xargs)"
+        if [ -n "$mid_trim" ]; then echo "Mods=${mid_trim}"; fi
+      done
+    fi
+  else
+    echo "; Ranked: Mods omitted to preserve global XP"
+  fi
+
+  # Bloc règles
+  cat <<EOF
+[${RULES_SECTION}]
+bAutoBalanceTeams=${SS_AUTO_BALANCE}
+AutoBalanceDelay=${SS_AUTO_BALANCE_DELAY}
+EOF
+
+  # Section du mode courant (toujours écrit)
+  cat <<EOF
+[${MODE_SECTION}]
+bBots=${SS_BOTS_ENABLED}
+NumBots=${SS_BOT_NUM}
+BotQuota=${SS_BOT_QUOTA}
+BotDifficulty=${SS_BOT_DIFFICULTY}
+EOF
+
+  if [ "${SS_FORCE_COOP_ONLY:-0}" = "1" ]; then
+    cat <<'EOF'
+[/Script/Insurgency.INSCheckpointGameMode]
+[/Script/Insurgency.INSOutpostGameMode]
+[/Script/Insurgency.INSSurvivalGameMode]
+EOF
+  else
+    # PvP + Coop : mutators par mode si autorisés (et sections vides sinon)
+    if [ "${XP_ENABLED}" != "1" ] || [ "${SS_ALLOW_MODS_WHEN_RANKED}" = "1" ]; then
+      echo
+      echo "[/Script/Insurgency.INSPushGameMode]"
+      if [ -n "${COMBINED_MUTATORS_PUSH}" ]; then echo "Mutators=${COMBINED_MUTATORS_PUSH}"; fi
+
+      echo
+      echo "[/Script/Insurgency.INSFirefightGameMode]"
+      if [ -n "${COMBINED_MUTATORS_FIREFIGHT}" ]; then echo "Mutators=${COMBINED_MUTATORS_FIREFIGHT}"; fi
+
+      echo
+      echo "[/Script/Insurgency.INSDominationGameMode]"
+      if [ -n "${COMBINED_MUTATORS_DOMINATION}" ]; then echo "Mutators=${COMBINED_MUTATORS_DOMINATION}"; fi
+
+      echo
+      echo "[/Script/Insurgency.INSSkirmishGameMode]"
+      if [ -n "${COMBINED_MUTATORS_SKIRMISH}" ]; then echo "Mutators=${COMBINED_MUTATORS_SKIRMISH}"; fi
+    else
+      echo "; Ranked: Mutators omitted to preserve global XP"
+      echo
+      echo "[/Script/Insurgency.INSPushGameMode]"
+      echo
+      echo "[/Script/Insurgency.INSFirefightGameMode]"
+      echo
+      echo "[/Script/Insurgency.INSDominationGameMode]"
+      echo
+      echo "[/Script/Insurgency.INSSkirmishGameMode]"
+    fi
+
+    echo
+    echo "[/Script/Insurgency.INSCheckpointGameMode]"
+    echo
+    echo "[/Script/Insurgency.INSOutpostGameMode]"
+    echo
+    echo "[/Script/Insurgency.INSSurvivalGameMode]"
+  fi
+} > "${GAMEINI}"
+echo "   → ${GAMEINI} written."
+
+# ─────────────────────────────────────────
+# 9) Construction URL minimale (+ AiModifier si présent et autorisé)
+# ─────────────────────────────────────────
+LAUNCH_URL="${MAP_ASSET}?Scenario=${SS_SCENARIO}"
+current_mut=""
+case "${scenario_mode}" in
+  PUSH)       current_mut="${COMBINED_MUTATORS_PUSH}" ;;
+  FIREFIGHT)  current_mut="${COMBINED_MUTATORS_FIREFIGHT}" ;;
+  DOMINATION) current_mut="${COMBINED_MUTATORS_DOMINATION}" ;;
+  SKIRMISH)   current_mut="${COMBINED_MUTATORS_SKIRMISH}" ;;
+  *)          current_mut="" ;;
+esac
+if [ "${XP_ENABLED}" != "1" ] || [ "${SS_ALLOW_MODS_WHEN_RANKED}" = "1" ]; then
+  if [ -n "${AIMOD_URL_ARGS}" ] && [ -n "${current_mut}" ] && [[ "${current_mut}" =~ (^|,)[[:space:]]*AiModifier([[:space:]]*,|$) ]]; then
+    LAUNCH_URL="${LAUNCH_URL}?Mutators=AiModifier?${AIMOD_URL_ARGS}"
+  fi
+fi
+echo "▶️  Launch URL: ${LAUNCH_URL}"
+
+# ─────────────────────────────────────────
+# 10) XP flags (lancement)
+# ─────────────────────────────────────────
+XP_ARGS=()
+if [ "${XP_ENABLED}" = "1" ]; then
+  XP_ARGS+=( "-GSLTToken=${GSLT_TOKEN}" "-GameStatsToken=${GAMESTATS_TOKEN}" )
+  echo "✅ Passing ranked tokens to server."
+fi
+
+# ─────────────────────────────────────────
+# 11) Démarrage serveur
+# ─────────────────────────────────────────
+cd "${GAMEDIR}/Insurgency/Binaries/Linux" || { echo "❌ Cannot cd to ${GAMEDIR}/Insurgency/Binaries/Linux"; exit 1; }
+
+# Ajoute -MapCycle si disponible
+if [ -s "${MAPCYCLE}" ]; then
+  EXTRA_SERVER_ARGS="${EXTRA_SERVER_ARGS} -MapCycle=$(basename "${MAPCYCLE}")"
+fi
+
+echo "🚀 Launching InsurgencyServer-Linux-Shipping..."
+echo "    Hostname='${SS_HOSTNAME}'"
+echo "    Ports: -Port=${PORT} -QueryPort=${QUERYPORT} -BeaconPort=${BEACONPORT}"
+echo "    AdminList='${ADMINSLIST_NAME}' (${ADMINSLIST_PATH})"
+echo "    Extra args: '${EXTRA_SERVER_ARGS}'"
+echo "────────────────────────────────────────────────────────"
+
+RCON_ARGS=()
+if [ -n "${RCON_PASSWORD}" ]; then
+  RCON_ARGS+=("-Rcon" "-RconPassword=${RCON_PASSWORD}")
+fi
+
+exec ./InsurgencyServer-Linux-Shipping \
+  "${LAUNCH_URL}" \
+  -hostname="${SS_HOSTNAME}" \
+  -Port="${PORT}" -QueryPort="${QUERYPORT}" -BeaconPort="${BEACONPORT}" \
+  -AdminList="${ADMINSLIST_NAME}" \
+  -log \
+  ${EXTRA_SERVER_ARGS} \
+  "${XP_ARGS[@]}" \
+  "${RCON_ARGS[@]}"
