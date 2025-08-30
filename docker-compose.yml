@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   sandstorm:
     image: chourmovs/issdedicated:main
@@ -11,41 +9,60 @@ services:
       - "27102:27102/udp"   # Game
       - "27131:27131/udp"   # Query
       - "15000:15000/udp"   # Beacon
-      - "27015:27015/tcp"   # RCON (si tu l'utilises)
+      - "27015:27015/tcp"   # RCON (laisser vide côté env pour l'XP)
 
     # Stockage
     volumes:
-      - /opt/sandstorm:/opt/sandstorm              # binaires + configs + workshop
-      - /opt/steam:/home/steam/Steam               # cache SteamCMD
+      - /opt/sandstorm:/opt/sandstorm    # binaires + configs + workshop
+      - /opt/steam:/home/steam/Steam     # cache SteamCMD
 
-    # UID/GID host (facultatif mais recommandé)
+    # UID/GID host
     user: "1000:1000"
 
     environment:
       # ────────── Base serveur ──────────
       GAMEDIR: "/opt/sandstorm"
       AUTO_UPDATE: "1"
+      TZ: "Europe/Paris"
 
-      SS_HOSTNAME: "CHOURMOVS ISS • COOP Checkpoint"
+      SS_HOSTNAME: "CHOURMOVS ISS • Ranked COOP + PUSH"
       SS_MAXPLAYERS: "24"
 
-      # ────────── Lancement par défaut (COOP) ──────────
+      # Par défaut (le MapCycle alternera les modes)
       SS_GAME_MODE: "Checkpoint"
       SS_SCENARIO: "Scenario_Farmhouse_Checkpoint_Security"
 
+      # Autoriser le versus + valider le MapCycle
+      SS_FORCE_COOP_ONLY: "0"
+      SS_VALIDATE_MAPCYCLE: "1"
 
-      # MapCycle 100% coop (utilisé pour l’écran de vote)
+      # ────────── MapCycle mix COOP + PUSH ──────────
       SS_MAPCYCLE: |
+        # --- COOP (Checkpoint) ---
         Scenario_Farmhouse_Checkpoint_Security
         Scenario_Crossing_Checkpoint_Security
         Scenario_Hideout_Checkpoint_Security
+
+        # --- VERSUS (Push) ---
+        Scenario_Farmhouse_Push_Security
+
+        # --- COOP ---
         Scenario_Refinery_Checkpoint_Security
         Scenario_Summit_Checkpoint_Security
         Scenario_Hillside_Checkpoint_Security
+
+        # --- VERSUS (Push) ---
+        Scenario_Ministry_Push_Security
+
+        # --- COOP ---
         Scenario_Precinct_Checkpoint_Security
         Scenario_Ministry_Checkpoint_Security
         Scenario_Outskirts_Checkpoint_Security
         Scenario_PowerPlant_Checkpoint_Security
+
+        # --- VERSUS (Push) ---
+        Scenario_Crossing_Push_Security
+        Scenario_Precinct_Push_Security
 
       # ────────── QoL / Vote / Timers ──────────
       SS_KILL_FEED: "1"
@@ -57,27 +74,38 @@ services:
       SS_VOTE_ENABLED: "1"
       SS_VOTE_PERCENT: "0.6"
 
-      # ────────── Bots (COOP) ──────────
+      # ────────── Bots (COOP & VERSUS) ──────────
+      # Ces valeurs garantissent des bots en Push/FF/Dom (écrites dans INSMultiplayerMode + section de mode)
       SS_BOTS_ENABLED: "1"
-      SS_BOT_NUM: "0"
-      SS_BOT_QUOTA: "6.0"        # (peu d'effet en coop, OK de laisser)
-      SS_BOT_DIFFICULTY: "0.9"
+      SS_BOT_NUM: "6"          # base
+      SS_BOT_QUOTA: "4"        # fill côté versus
+      SS_BOT_DIFFICULTY: "0.85"
+
+      # Affinage COOP (optionnel)
       SS_FRIENDLY_BOT_QUOTA: "0"
-      SS_MIN_ENEMIES: "10"
+      SS_MIN_ENEMIES: "6"
       SS_MAX_ENEMIES: "16"
 
       # ────────── XP / Stats ──────────
       SS_ENABLE_STATS: "1"
-      RCON_PASSWORD: ""          # Le RCON n’empêche pas l’XP
+      GSLT_TOKEN: ""
+      GAMESTATS_TOKEN : ""
+      
+      RCON_PASSWORD: ""                # DOIT rester vide pour l'XP classé
+      SS_ALLOW_MODS_WHEN_RANKED: "1"   # protège l'XP si des mods sont définis par erreur
 
-      # ────────── Workshop / Mutators ──────────
-      SS_MODS: "1141916"         # (ex: AiModifier Workshop ID si requis par ton build)
-      SS_MUTATORS: "AiModifier"  # Active AiModifier (les CVAR ci-dessous s’appliqueront)
+      # ────────── Mods/Mutators (désactivés pour XP) ──────────
+      # Laisse tout vide pour rester "ranked".
+      SS_MODS: ""
+      SS_MUTATORS_VERSUS: ""
+      SS_MUTATORS_PUSH: ""
+      SS_MUTATORS_FIREFIGHT: ""
+      SS_MUTATORS_DOMINATION: ""
+      SS_MUTATORS_SKIRMISH: ""
 
-      # ───────────────────────────────────────────────
-      #                AiModifier — TOUTES les CVAR
-      # (laisse vide celles que tu ne veux pas surcharger)
-      # ───────────────────────────────────────────────
+      # ────────── Admins ──────────
+      # Remplace par tes SteamID64 si besoin (séparés par virgules)
+      SS_ADMINS: ""
 
       # 1) Skill de base
       AIMOD_DIFFICULTY: "0.6"
@@ -215,6 +243,3 @@ services:
       AIMOD_ALLOW_MELEE: "0"
       AIMOD_STAY_IN_SQUADS: "1"
       AIMOD_SQUAD_SIZE: "2"
-
-      # ────────── Extra CLI (optionnel) ──────────
-      EXTRA_SERVER_ARGS: ""
