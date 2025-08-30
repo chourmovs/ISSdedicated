@@ -3,8 +3,8 @@
 # Insurgency: Sandstorm Dedicated Server - EntryPoint (coop-first, safe)
 # - XP classé (GSLT + GameStats, RCON vide)
 # - Admins: Admins.txt + -AdminList
-# - Mods (Workshop) chargés; Mutators actifs UNIQUEMENT en Skirmish
-# - AiModifier: paramètres via URL UNIQUEMENT si Skirmish + AiModifier actif
+# - Workshop Mods chargés; Mutators actifs en PvP + Skirmish
+# - AiModifier: paramètres via URL si le mutator est listé (PvP & Skirmish)
 # - MapCycle + déduction Asset depuis SCENARIO + anti-casse (fallback)
 # - Whitelists Mods/Mutators (bots-only)
 # - Logs détaillés + validations
@@ -28,6 +28,7 @@ PORT="${PORT:-27102}"
 QUERYPORT="${QUERYPORT:-27131}"
 BEACONPORT="${BEACONPORT:-15000}"
 RCON_PASSWORD="${RCON_PASSWORD:-}"     # ← vide = XP classé possible
+
 SS_HOSTNAME="${SS_HOSTNAME:-CHOURMOVS ISS • COOP}"
 SS_MAXPLAYERS="${SS_MAXPLAYERS:-24}"
 
@@ -64,7 +65,23 @@ GAMESTATS_TOKEN="${GAMESTATS_TOKEN:-}"
 
 # Mods (Workshop) & Mutators
 SS_MODS="${SS_MODS:-}"                        # "1141916,12345"
-SS_MUTATORS_SKIRMISH="${SS_MUTATORS_SKIRMISH:-}"  # "AiModifier,HeadshotOnly"
+
+# Mutators par mode
+SS_MUTATORS_SKIRMISH="${SS_MUTATORS_SKIRMISH:-}"   # ex: "AiModifier,HeadshotOnly"
+SS_MUTATORS_VERSUS="${SS_MUTATORS_VERSUS:-}"       # mutators communs à (Push/FF/Dom)
+SS_MUTATORS_PUSH="${SS_MUTATORS_PUSH:-}"
+SS_MUTATORS_FIREFIGHT="${SS_MUTATORS_FIREFIGHT:-}"
+SS_MUTATORS_DOMINATION="${SS_MUTATORS_DOMINATION:-}"
+
+# Compat rétro: certaines configs utilisaient "SS_MUTATORS"
+SS_MUTATORS="${SS_MUTATORS:-}"
+if [[ -z "${SS_MUTATORS_SKIRMISH}" && -n "${SS_MUTATORS}" ]]; then
+  SS_MUTATORS_SKIRMISH="${SS_MUTATORS}"
+fi
+if [[ -z "${SS_MUTATORS_VERSUS}" && -n "${SS_MUTATORS}" ]]; then
+  SS_MUTATORS_VERSUS="${SS_MUTATORS}"
+fi
+
 EXTRA_SERVER_ARGS="${EXTRA_SERVER_ARGS:-}"
 
 # Admins
@@ -324,7 +341,7 @@ esac
 echo "🎮 Default mode → ${SS_GAME_MODE} (${MODE_SECTION_DEF})"
 
 # ─────────────────────────────────────────
-# 6) AiModifier placeholders → URL args (Skirmish only)
+# 6) AiModifier placeholders → URL args (tous modes)
 # ─────────────────────────────────────────
 echo "🧩 Building AiModifier URL args from placeholders..."
 AIMOD_ARGS=()
@@ -485,6 +502,7 @@ filter_csv_by_whitelist() {
   local csv="$1" wl="$2"
   [[ -z "$csv" ]] && { echo ""; return; }
   [[ -z "$wl"  ]] && { echo "$csv"; return; }
+
   IFS=',' read -ra items <<< "$csv"
   IFS=',' read -ra allowed <<< "$wl"
   declare -A allow
@@ -492,6 +510,7 @@ filter_csv_by_whitelist() {
     k="$(echo "$ok" | xargs | tr '[:upper:]' '[:lower:]')"
     [[ -n "$k" ]] && allow["$k"]=1
   done
+
   out=()
   for it in "${items[@]}"; do
     val="$(echo "$it" | xargs)"
@@ -504,14 +523,38 @@ filter_csv_by_whitelist() {
   done
   (IFS=','; echo "${out[*]}")
 }
+
 ACTIVE_MUTATORS_SKIRMISH="${SS_MUTATORS_SKIRMISH}"
 if [[ "${SS_ENFORCE_MUTATOR_WHITELIST}" == "1" ]]; then
   ACTIVE_MUTATORS_SKIRMISH="$(filter_csv_by_whitelist "${SS_MUTATORS_SKIRMISH}" "${SS_MUTATOR_WHITELIST}")"
 fi
+
 ACTIVE_MODS="${SS_MODS}"
 if [[ "${SS_ENFORCE_MODS_WHITELIST}" == "1" && -n "${SS_MODS_WHITELIST}" ]]; then
   ACTIVE_MODS="$(filter_csv_by_whitelist "${SS_MODS}" "${SS_MODS_WHITELIST}")"
 fi
+
+# Mutators PvP (filtrés)
+ACTIVE_MUTATORS_VERSUS="$(filter_csv_by_whitelist "${SS_MUTATORS_VERSUS}"     "${SS_MUTATOR_WHITELIST}")"
+ACTIVE_MUTATORS_PUSH="$(filter_csv_by_whitelist    "${SS_MUTATORS_PUSH}"       "${SS_MUTATOR_WHITELIST}")"
+ACTIVE_MUTATORS_FIREFIGHT="$(filter_csv_by_whitelist "${SS_MUTATORS_FIREFIGHT}" "${SS_MUTATOR_WHITELIST}")"
+ACTIVE_MUTATORS_DOMINATION="$(filter_csv_by_whitelist "${SS_MUTATORS_DOMINATION}" "${SS_MUTATOR_WHITELIST}")"
+
+# Combinaisons finales par mode (VERSUS + spécifique)
+combine_csv() {
+  local base="$1" add="$2"
+  if [[ -n "$base" && -n "$add" ]]; then
+    echo "${base},${add}"
+  elif [[ -n "$base" ]]; then
+    echo "${base}"
+  else
+    echo "${add}"
+  fi
+}
+COMBINED_MUTATORS_PUSH="$(combine_csv "${ACTIVE_MUTATORS_VERSUS}" "${ACTIVE_MUTATORS_PUSH}")"
+COMBINED_MUTATORS_FIREFIGHT="$(combine_csv "${ACTIVE_MUTATORS_VERSUS}" "${ACTIVE_MUTATORS_FIREFIGHT}")"
+COMBINED_MUTATORS_DOMINATION="$(combine_csv "${ACTIVE_MUTATORS_VERSUS}" "${ACTIVE_MUTATORS_DOMINATION}")"
+COMBINED_MUTATORS_SKIRMISH="$(combine_csv "${ACTIVE_MUTATORS_VERSUS}" "${ACTIVE_MUTATORS_SKIRMISH}")"
 
 # ─────────────────────────────────────────
 # 7) Validation “anti-casse” des scénarios (mode ↔ map) + fallback
@@ -650,8 +693,6 @@ bMapVoting=True
 ; 🎯 Choisis l’un OU l’autre :
 bMapVoting=True
 bUseMapCycle=True
-; (ou inverse les deux si tu veux pas de vote)
-
 EOF
 
   # Mods (Workshop) chargés globalement (filtrés)
@@ -665,24 +706,27 @@ EOF
 
   # Bloc règles
   cat <<EOF
-
 [${RULES_SECTION}]
 bAutoBalanceTeams=${SS_AUTO_BALANCE}
 AutoBalanceDelay=${SS_AUTO_BALANCE_DELAY}
+EOF
 
+  # Bots fill en PvP (versus) : écrire aussi dans INSMultiplayerMode
+  if [[ "${RULES_SECTION}" == "/Script/Insurgency.INSMultiplayerMode" ]]; then
+    echo "bBots=${SS_BOTS_ENABLED}"
+    echo "NumBots=${SS_BOT_NUM}"
+    echo "BotQuota=${SS_BOT_QUOTA}"
+    echo "BotDifficulty=${SS_BOT_DIFFICULTY}"
+  fi
+
+  # Section du mode courant (toujours écrit)
+  cat <<EOF
 [${MODE_SECTION}]
 bBots=${SS_BOTS_ENABLED}
 NumBots=${SS_BOT_NUM}
 BotQuota=${SS_BOT_QUOTA}
 BotDifficulty=${SS_BOT_DIFFICULTY}
 EOF
-
-  # Coop extras si besoin
-  if [[ "${RULES_SECTION}" == "/Script/Insurgency.INSCoopMode" ]]; then
-    echo "FriendlyBotQuota=${SS_FRIENDLY_BOT_QUOTA:-0}"
-    [[ -n "${SS_MIN_ENEMIES:-}" ]] && echo "MinimumEnemies=${SS_MIN_ENEMIES}"
-    [[ -n "${SS_MAX_ENEMIES:-}" ]] && echo "MaximumEnemies=${SS_MAX_ENEMIES}"
-  fi
 
   # Sections disponibles (selon COOP-only)
   if [[ "${SS_FORCE_COOP_ONLY:-0}" == "1" ]]; then
@@ -692,29 +736,48 @@ EOF
 [/Script/Insurgency.INSSurvivalGameMode]
 EOF
   else
-    cat <<'EOF'
-[/Script/Insurgency.INSPushGameMode]
-[/Script/Insurgency.INSFirefightGameMode]
-[/Script/Insurgency.INSDominationGameMode]
-[/Script/Insurgency.INSCheckpointGameMode]
-[/Script/Insurgency.INSOutpostGameMode]
-[/Script/Insurgency.INSSurvivalGameMode]
-EOF
-    # Mutators UNIQUEMENT en Skirmish (filtrés)
+    # PvP + Coop : écrire toutes les sections + Mutators par mode
+    echo
+    echo "[/Script/Insurgency.INSPushGameMode]"
+    [[ -n "${COMBINED_MUTATORS_PUSH}" ]] && echo "Mutators=${COMBINED_MUTATORS_PUSH}"
+
+    echo
+    echo "[/Script/Insurgency.INSFirefightGameMode]"
+    [[ -n "${COMBINED_MUTATORS_FIREFIGHT}" ]] && echo "Mutators=${COMBINED_MUTATORS_FIREFIGHT}"
+
+    echo
+    echo "[/Script/Insurgency.INSDominationGameMode]"
+    [[ -n "${COMBINED_MUTATORS_DOMINATION}" ]] && echo "Mutators=${COMBINED_MUTATORS_DOMINATION}"
+
     echo
     echo "[/Script/Insurgency.INSSkirmishGameMode]"
-    [ -n "${ACTIVE_MUTATORS_SKIRMISH}" ] && echo "Mutators=${ACTIVE_MUTATORS_SKIRMISH}"
-  fi
+    [[ -n "${COMBINED_MUTATORS_SKIRMISH}" ]] && echo "Mutators=${COMBINED_MUTATORS_SKIRMISH}"
 
+    echo
+    echo "[/Script/Insurgency.INSCheckpointGameMode]"
+    echo
+    echo "[/Script/Insurgency.INSOutpostGameMode]"
+    echo
+    echo "[/Script/Insurgency.INSSurvivalGameMode]"
+  fi
 } > "${GAMEINI}"
 echo "   → ${GAMEINI} written."
 
 # ─────────────────────────────────────────
-# 9) Construction URL minimale
+# 9) Construction URL minimale (+ AiModifier si présent)
 # ─────────────────────────────────────────
 LAUNCH_URL="${MAP_ASSET}?Scenario=${SS_SCENARIO}"
-# Ajoute AiModifier+args UNIQUEMENT si Skirmish & whiteliste
-if [[ "${scenario_mode}" == "SKIRMISH" && -n "${ACTIVE_MUTATORS_SKIRMISH}" && "${ACTIVE_MUTATORS_SKIRMISH}" =~ (^|,)\ *AiModifier\ *(,|$) && -n "${AIMOD_URL_ARGS}" ]]; then
+
+# Ajoute AiModifier + ses args via URL si le mode courant est PvP/Skirmish et si AiModifier est listé
+current_mut=""
+case "${scenario_mode}" in
+  PUSH)       current_mut="${COMBINED_MUTATORS_PUSH}" ;;
+  FIREFIGHT)  current_mut="${COMBINED_MUTATORS_FIREFIGHT}" ;;
+  DOMINATION) current_mut="${COMBINED_MUTATORS_DOMINATION}" ;;
+  SKIRMISH)   current_mut="${COMBINED_MUTATORS_SKIRMISH}" ;;
+  *)          current_mut="" ;;
+esac
+if [[ -n "${AIMOD_URL_ARGS}" && -n "${current_mut}" && "${current_mut}" =~ (^|,)[[:space:]]*AiModifier([[:space:]]*,|$) ]]; then
   LAUNCH_URL="${LAUNCH_URL}?Mutators=AiModifier?${AIMOD_URL_ARGS}"
 fi
 
