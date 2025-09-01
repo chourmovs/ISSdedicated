@@ -1,46 +1,27 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Watcher Insurgency: Sandstorm → ntfy push
-
-- Tail -F robuste (rotation, truncation)
-- Détection connexion joueur via REGEX (configurable)
+Watcher Insurgency: Sandstorm → ntfy push (requests)
+- Tail -F robuste (rotation/troncature)
+- REGEX configurable (capture id/name/team)
 - Anti-doublon (TTL)
-- ntfy via HTTP(S) POST (pas de dépendances externes)
-
-ENV attendues (valeurs par défaut entre []):
-  LOG_FILE                [/opt/sandstorm/Insurgency/Saved/Logs/Insurgency.log]
-  NTFY_ENABLED            [1]           # 1=on, 0=off
-  NTFY_SERVER             [https://ntfy.sh]
-  NTFY_TOPIC              (requis si NTFY_ENABLED=1)
-  NTFY_TITLE_PREFIX       [Sandstorm • Connexion]
-  NTFY_PRIORITY           [high]        # min, low, default, high, max
-  NTFY_TAGS               [video_game]  # tags séparés par virgules
-  NTFY_CLICK              []            # URL cliquable dans la notif (optionnel)
-  NTFY_TOKEN              []            # Authorization: Bearer <token> (si ntfy protégé)
-  NTFY_USER               []            # ou Basic auth
-  NTFY_PASS               []
-  DEDUP_TTL               [600]         # secondes anti-spam par (id,name)
-  LOG_LEVEL               [INFO]
-
-  REGEX                   # pattern principal (doit capturer 'id' et idéalement 'name')
-  FALLBACK_REGEX_1..N     # patterns alternatifs (optionnels)
-
-Utilisation:
-  /usr/bin/python3 /opt/sandstorm/log_notify_ntfy.py
+- Logs détaillés (ouverture log, match, post ntfy avec status)
 """
-import os, re, time, logging, base64
-import urllib.request, urllib.error
+
+import os, re, time, logging, base64, socket
 from pathlib import Path
 from datetime import datetime, timedelta
+import requests
 
-# ---------- Config ----------
+# ============= Config =============
 LOG_FILE        = os.environ.get("LOG_FILE", "/opt/sandstorm/Insurgency/Saved/Logs/Insurgency.log")
 ENABLED         = os.environ.get("NTFY_ENABLED", "1") == "1"
+
 SERVER          = os.environ.get("NTFY_SERVER", "https://ntfy.sh").rstrip("/")
-TOPIC           = os.environ.get("NTFY_TOPIC", "")
+TOPIC           = (os.environ.get("NTFY_TOPIC", "") or "").strip()
+
 TITLE_PREFIX    = os.environ.get("NTFY_TITLE_PREFIX", "Sandstorm • Connexion")
-PRIORITY        = os.environ.get("NTFY_PRIORITY", "high")
+PRIORITY        = os.environ.get("NTFY_PRIORITY", "high")   # min|low|default|high|max ou 1..5
 TAGS            = os.environ.get("NTFY_TAGS", "video_game")
 CLICK_URL       = os.environ.get("NTFY_CLICK", "")
 TOKEN           = os.environ.get("NTFY_TOKEN", "")
@@ -48,13 +29,16 @@ BASIC_USER      = os.environ.get("NTFY_USER", "")
 BASIC_PASS      = os.environ.get("NTFY_PASS", "")
 TTL_SECONDS     = int(os.environ.get("DEDUP_TTL", "600"))
 
+LOG_LEVEL       = os.environ.get("LOG_LEVEL", "INFO").upper()
+TEST_ON_START   = os.environ.get("NTFY_TEST_ON_START", "1") == "1"
+LOG_REQUEST     = os.environ.get("NTFY_LOG_REQUEST", "1") == "1"  # log URL/titre/message (tronqué)
+
 REGEX_MAIN = os.environ.get(
     "REGEX",
-    # Fréquent sur Sandstorm (à adapter si besoin)
-    r"LogNet:\s+Login.*?Name=(?P<name>[^,\]\s]+).*?SteamID(?:64)?[:=]\s*(?P<id>\d{7,20})"
+    r"LogGameMode:\s+Display:\s+Player\s+(?P<id>\d+)\s+'(?P<name>[^']+)'\s+joined\s+team\s+(?P<team>\d+)"
 )
 
-# Fallbacks courants
+# Fallbacks (facultatif)
 fallbacks = []
 i = 1
 while True:
@@ -64,50 +48,54 @@ while True:
     i += 1
 if not fallbacks:
     fallbacks = [
-        r"PlayerConnected.*?SteamID[:=]\s*(?P<id>\d{7,20})\b.*?Name[:=]\s*(?P<name>[^,\]\s]+)",
-        r"\b(?P<name>.+?)\s+joined\s+the\s+game.*?(?P<id>\d{7,20})",
+        r"Player\s+(?P<id>\d+)\s+'(?P<name>[^']+)'\s+joined\s+team\s+(?P<team>\d+)",
     ]
 
 PATS = [re.compile(REGEX_MAIN)]
 PATS.extend(re.compile(p) for p in fallbacks)
 
 logging.basicConfig(
-    level=os.environ.get("LOG_LEVEL", "INFO"),
+    level=LOG_LEVEL,
     format="%(asctime)s [%(levelname)s] %(message)s"
 )
 
-# ---------- ntfy ----------
-def ntfy_post(title: str, message: str):
+# ============= ntfy POST (requests) =============
+def ntfy_post(title: str, message: str) -> int:
     if not ENABLED or not TOPIC:
-        return
+        logging.warning("ntfy_post appelé mais ENABLED=%s TOPIC='%s'", ENABLED, TOPIC)
+        return -1
+
     url = f"{SERVER}/{TOPIC}"
-    body = message.encode("utf-8")
-    req = urllib.request.Request(url, data=body, method="POST")
-    # Headers ntfy
-    req.add_header("Title", title)
-    req.add_header("Priority", PRIORITY)
-    if TAGS.strip():
-        req.add_header("Tags", TAGS)
-    if CLICK_URL.strip():
-        req.add_header("Click", CLICK_URL)
-    # Auth optionnelle
+    headers = {
+        "Title": title,
+        "Priority": str(PRIORITY),
+    }
+    if TAGS.strip():   headers["Tags"]  = TAGS
+    if CLICK_URL.strip(): headers["Click"] = CLICK_URL
     if TOKEN:
-        req.add_header("Authorization", f"Bearer {TOKEN}")
+        headers["Authorization"] = f"Bearer {TOKEN}"
     elif BASIC_USER and BASIC_PASS:
         token = base64.b64encode(f"{BASIC_USER}:{BASIC_PASS}".encode("utf-8")).decode("ascii")
-        req.add_header("Authorization", f"Basic {token}")
+        headers["Authorization"] = f"Basic {token}"
 
-    # TLS OK (ca-certificates)
+    data = message.encode("utf-8")
+
+    if LOG_REQUEST:
+        preview = (message[:200] + "…") if len(message) > 200 else message
+        logging.info("ntfy POST → %s | Title='%s' | len(body)=%d | preview='%s'",
+                     url, title, len(data), preview.replace("\n", "\\n"))
+
     try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            if resp.status >= 300:
-                raise RuntimeError(f"ntfy HTTP {resp.status}")
-    except urllib.error.HTTPError as e:
-        logging.error("ntfy HTTPError: %s %s", e.code, e.read())
-    except Exception as e:
+        r = requests.post(url, data=data, headers=headers, timeout=10)
+        logging.info("ntfy POST status=%s reason=%s", r.status_code, getattr(r, "reason", ""))
+        if r.status_code >= 300:
+            logging.error("ntfy response body: %s", r.text[:500])
+        return r.status_code
+    except requests.RequestException as e:
         logging.exception("ntfy POST failed: %s", e)
+        return -2
 
-# ---------- tail -F ----------
+# ============= Tail -F =============
 def follow(path: Path):
     f = None
     cur_sig = None
@@ -115,30 +103,26 @@ def follow(path: Path):
         try:
             st = path.stat()
             sig = (st.st_ino, st.st_dev)
-            reopen = f is None or sig != cur_sig
-            if reopen:
-                if f: 
+            if f is None or sig != cur_sig:
+                if f:
                     try: f.close()
                     except: pass
-                # Ouvre et positionne à la fin (on notifie seulement le nouveau)
                 f = path.open("r", errors="ignore")
+                # se placer à la fin: on ne notifie que du nouveau
                 f.seek(0, 2)
                 cur_sig = sig
-                logging.info("Ouverture du log: %s", path)
-
+                logging.info("Ouverture du log: %s (inode=%s)", path, sig)
             line = f.readline()
             if line:
                 yield line.rstrip("\r\n")
             else:
-                # Troncature? (f.tell() > st.st_size) → réouvrir
-                try:
-                    if f.tell() > st.st_size:
-                        logging.info("Troncature détectée, réouverture...")
-                        f.close(); f = None
-                except Exception:
-                    pass
+                # rotation/troncature
+                if f.tell() > st.st_size:
+                    logging.info("Troncature détectée, réouverture…")
+                    f.close(); f = None
                 time.sleep(0.5)
         except FileNotFoundError:
+            logging.warning("Log introuvable: %s (on réessaie)", path)
             time.sleep(1.0)
         except Exception as e:
             logging.exception("Erreur tail: %s", e)
@@ -148,43 +132,69 @@ def detect(line: str):
     for pat in PATS:
         m = pat.search(line)
         if m:
-            gid = (m.groupdict().get("id") or "").strip()
-            name = (m.groupdict().get("name") or "").strip()
-            if gid:
-                return gid, name
+            return m.groupdict()
     return None
 
+# ============= Main =============
 def main():
     if not ENABLED:
-        logging.info("NTFY_ENABLED=0 → watcher désactivé.")
+        logging.info("NTFY_ENABLED=0 → watcher inactif.")
         return
     if not TOPIC:
-        raise SystemExit("NTFY_TOPIC manquant. Désactive NTFY_ENABLED ou fournis un topic long/secret.")
+        raise SystemExit("NTFY_TOPIC manquant. Fournis un sujet (long/secret).")
 
-    log_path = Path(LOG_FILE)
-    logging.info("Surveillance: %s", log_path)
-    logging.info("ntfy vers: %s/%s", SERVER, TOPIC)
+    host = socket.gethostname()
+    logging.info("=== ntfy watcher démarré ===")
+    logging.info("Server: %s | Topic: %s | Log: %s | Host: %s", SERVER, TOPIC, LOG_FILE, host)
+    logging.info("Regex: %s", REGEX_MAIN)
+    if fallbacks:
+        logging.info("Fallbacks: %s", "; ".join(fallbacks))
 
-    last_sent = {}  # (id,name) -> datetime
+    # Test de publication au démarrage (pour valider la chaîne de notif)
+    if TEST_ON_START:
+        code = ntfy_post(
+            f"{TITLE_PREFIX} • watcher started",
+            f"Watcher opérationnel sur {host} ({datetime.now():%Y-%m-%d %H:%M:%S}).\n"
+            f"Log suivi: {LOG_FILE}\n"
+            f"Regex: {REGEX_MAIN}"
+        )
+        logging.info("Test start post → code=%s", code)
+
+    last_sent = {}   # clé=(id,name,team) -> datetime
     ttl = timedelta(seconds=TTL_SECONDS)
 
-    for line in follow(log_path):
-        hit = detect(line)
-        if not hit:
+    path = Path(LOG_FILE)
+    for line in follow(path):
+        if "joined team" in line or "LogGameMode" in line:
+            logging.debug("Ligne candidate: %s", line.strip())
+        info = detect(line)
+        if not info:
             continue
-        gid, name = hit
-        key = (gid, name)
+
+        gid  = (info.get("id") or "").strip()
+        name = (info.get("name") or "").strip()
+        team = (info.get("team") or "").strip()
+        key  = (gid, name, team)
+
         now = datetime.now()
         if key in last_sent and (now - last_sent[key]) < ttl:
-            # Anti-spam
+            logging.debug("Dedup TTL ignore: %s", key)
             continue
         last_sent[key] = now
 
-        human = now.strftime("%Y-%m-%d %H:%M:%S")
+        logging.info("Match: name='%s' id=%s team=%s", name, gid, team)
+
         title = f"{TITLE_PREFIX}: {name or 'Unknown'} ({gid})"
-        msg = f"Joueur connecté\n• Nom : {name or 'Unknown'}\n• ID : {gid}\n• Quand : {human}\n(log={LOG_FILE})\n"
-        ntfy_post(title, msg)
-        logging.info("Notif envoyée: %s", title)
+        body  = (
+            f"Joueur connecté\n"
+            f"• Nom  : {name or 'Unknown'}\n"
+            f"• ID   : {gid or '?'}\n"
+            f"• Team : {team or '?'}\n"
+            f"• Quand: {now:%Y-%m-%d %H:%M:%S}\n"
+            f"(log={LOG_FILE})\n"
+        )
+        code = ntfy_post(title, body)
+        logging.info("Notification envoyée (code=%s) pour %s/%s", code, name, gid)
 
 if __name__ == "__main__":
     main()
