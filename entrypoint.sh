@@ -673,25 +673,32 @@ fi
 # ─────────────────────────────────────────────────────────
 # ntfy: watcher des connexions joueurs (regex "joined team")
 # ─────────────────────────────────────────────────────────
-: "${NTFY_ENABLED:=1}"
-: "${LOG_FILE:=/opt/sandstorm/Insurgency/Saved/Logs/Insurgency.log}"
+start_ntfy() {
+  : "${NTFY_ENABLED:=1}"
+  : "${LOG_FILE:=/opt/sandstorm/Insurgency/Saved/Logs/Insurgency.log}"
 
-# Regex principale : LogGameMode: Display: Player <id> '<name>' joined team <team>
-: "${REGEX:=LogGameMode:\s+Display:\s+Player\s+(?P<id>\d+)\s+'(?P<name>[^']+)'\s+joined\s+team\s+(?P<team>\d+)}"
+  # Regex principale : LogGameMode: Display: Player <id> '<name>' joined team <team>
+  : "${REGEX:=LogGameMode:\s+Display:\s+Player\s+(?P<id>\d+)\s+'(?P<name>[^']+)'\s+joined\s+team\s+(?P<team>\d+)}"
+  # Fallback plus souple (sans le préfixe LogGameMode)
+  : "${FALLBACK_REGEX_1:=Player\s+(?P<id>\d+)\s+'(?P<name>[^']+)'\s+joined\s+team\s+(?P<team>\d+)}"
 
-# Fallback plus souple (sans le préfixe LogGameMode)
-: "${FALLBACK_REGEX_1:=Player\s+(?P<id>\d+)\s+'(?P<name>[^']+)'\s+joined\s+team\s+(?P<team>\d+)}"
+  if [ "${NTFY_ENABLED}" = "1" ] && [ -n "${NTFY_TOPIC:-}" ]; then
+    echo "▶️  ntfy: watcher activé (topic=${NTFY_TOPIC})"
+    # Export des variables lues par le watcher
+    export LOG_FILE REGEX FALLBACK_REGEX_1 \
+           NTFY_ENABLED NTFY_SERVER NTFY_TOPIC NTFY_TITLE_PREFIX \
+           NTFY_PRIORITY NTFY_TAGS NTFY_CLICK NTFY_TOKEN \
+           NTFY_USER NTFY_PASS DEDUP_TTL LOG_LEVEL
+    # Lancement non bufferisé + PID file
+    /usr/bin/python3 -u /opt/sandstorm/log_notify_ntfy.py >>/opt/sandstorm/ntfy.log 2>&1 &
+    echo $! > /opt/sandstorm/ntfy.pid
+  else
+    echo "ℹ️  ntfy: désactivé (NTFY_ENABLED=${NTFY_ENABLED:-0}, topic='${NTFY_TOPIC:-<unset>}')"
+  fi
+}
 
-if [ "${NTFY_ENABLED}" = "1" ] && [ -n "${NTFY_TOPIC:-}" ]; then
-  echo "▶️  ntfy: watcher activé (topic=${NTFY_TOPIC})"
-  export LOG_FILE REGEX FALLBACK_REGEX_1
-  nohup /usr/bin/python3 /opt/sandstorm/log_notify_ntfy.py \
-        >/opt/sandstorm/ntfy.log 2>&1 &
-else
-  echo "ℹ️  ntfy: désactivé (NTFY_ENABLED=${NTFY_ENABLED:-0}, topic='${NTFY_TOPIC:-<unset>}')"
-fi
-
-
+# Démarre le watcher avant le serveur
+start_ntfy
 
 # ─────────────────────────────────────────
 # 11) Démarrage serveur
