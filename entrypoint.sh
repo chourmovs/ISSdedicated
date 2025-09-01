@@ -676,26 +676,34 @@ fi
 start_ntfy() {
   : "${NTFY_ENABLED:=1}"
   : "${LOG_FILE:=/opt/sandstorm/Insurgency/Saved/Logs/Insurgency.log}"
-
-  # Regex principale : LogGameMode: Display: Player <id> '<name>' joined team <team>
   : "${REGEX:=LogGameMode:\s+Display:\s+Player\s+(?P<id>\d+)\s+'(?P<name>[^']+)'\s+joined\s+team\s+(?P<team>\d+)}"
-  # Fallback plus souple (sans le préfixe LogGameMode)
   : "${FALLBACK_REGEX_1:=Player\s+(?P<id>\d+)\s+'(?P<name>[^']+)'\s+joined\s+team\s+(?P<team>\d+)}"
 
+  # ► Localisation du watcher (hors volume) + fallbacks
+  WATCHER_BIN="${WATCHER_BIN:-/usr/local/bin/log_notify_ntfy.py}"
+  if [ ! -x "$WATCHER_BIN" ]; then
+    for c in /usr/local/bin/log_notify_ntfy.py /opt/log_notify_ntfy.py /opt/sandstorm/log_notify_ntfy.py; do
+      [ -x "$c" ] && WATCHER_BIN="$c" && break
+    done
+  fi
+  if [ ! -x "$WATCHER_BIN" ]; then
+    echo "❌ ntfy: watcher introuvable (cherché: /usr/local/bin/log_notify_ntfy.py, /opt/log_notify_ntfy.py, /opt/sandstorm/log_notify_ntfy.py)"
+    return
+  fi
+
   if [ "${NTFY_ENABLED}" = "1" ] && [ -n "${NTFY_TOPIC:-}" ]; then
-    echo "▶️  ntfy: watcher activé (topic=${NTFY_TOPIC})"
-    # Export des variables lues par le watcher
+    echo "▶️  ntfy: watcher activé (topic=${NTFY_TOPIC}) via ${WATCHER_BIN}"
     export LOG_FILE REGEX FALLBACK_REGEX_1 \
            NTFY_ENABLED NTFY_SERVER NTFY_TOPIC NTFY_TITLE_PREFIX \
            NTFY_PRIORITY NTFY_TAGS NTFY_CLICK NTFY_TOKEN \
-           NTFY_USER NTFY_PASS DEDUP_TTL LOG_LEVEL
-    # Lancement non bufferisé + PID file
-    /usr/bin/python3 -u /opt/sandstorm/log_notify_ntfy.py >>/opt/sandstorm/ntfy.log 2>&1 &
+           NTFY_USER NTFY_PASS DEDUP_TTL LOG_LEVEL NTFY_TEST_ON_START NTFY_LOG_REQUEST
+    /usr/bin/python3 -u "$WATCHER_BIN" >>/opt/sandstorm/ntfy.log 2>&1 &
     echo $! > /opt/sandstorm/ntfy.pid
   else
     echo "ℹ️  ntfy: désactivé (NTFY_ENABLED=${NTFY_ENABLED:-0}, topic='${NTFY_TOPIC:-<unset>}')"
   fi
 }
+
 
 # Démarre le watcher avant le serveur
 
