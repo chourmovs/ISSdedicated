@@ -670,6 +670,28 @@ if [ "${XP_ENABLED}" = "1" ]; then
   echo "✅ Passing ranked tokens to server."
 fi
 
+# ─────────────────────────────────────────────────────────
+# ntfy: watcher des connexions joueurs (optionnel)
+# ─────────────────────────────────────────────────────────
+: "${NTFY_ENABLED:=1}"
+: "${LOG_FILE:=/opt/sandstorm/Insurgency/Saved/Logs/Insurgency.log}"
+# Exemple de REGEX (adapter si besoin)
+: "${REGEX:=LogNet:\ +Login.*?Name=(?P<name>[^,\\]\\s]+).*?SteamID(?:64)?[:=]\\s*(?P<id>\\d{7,20})}"
+
+if [ "${NTFY_ENABLED}" = "1" ]; then
+  if [ -z "${NTFY_TOPIC:-}" ]; then
+    echo "⚠️  NTFY_ENABLED=1 mais NTFY_TOPIC est vide → pas de notifications."
+  else
+    echo "▶️  ntfy: watcher activé (topic=${NTFY_TOPIC})"
+    # On exporte les vars pour le process enfant
+    export LOG_FILE REGEX
+    nohup /usr/bin/python3 /opt/sandstorm/log_notify_ntfy.py >/opt/sandstorm/ntfy.log 2>&1 &
+  fi
+else
+  echo "ℹ️  ntfy: désactivé (NTFY_ENABLED=0)"
+fi
+
+
 # ─────────────────────────────────────────
 # 11) Démarrage serveur
 # ─────────────────────────────────────────
