@@ -671,25 +671,26 @@ if [ "${XP_ENABLED}" = "1" ]; then
 fi
 
 # ─────────────────────────────────────────────────────────
-# ntfy: watcher des connexions joueurs (optionnel)
+# ntfy: watcher des connexions joueurs (regex "joined team")
 # ─────────────────────────────────────────────────────────
 : "${NTFY_ENABLED:=1}"
 : "${LOG_FILE:=/opt/sandstorm/Insurgency/Saved/Logs/Insurgency.log}"
-# Exemple de REGEX (adapter si besoin)
-: "${REGEX:=LogNet:\ +Login.*?Name=(?P<name>[^,\\]\\s]+).*?SteamID(?:64)?[:=]\\s*(?P<id>\\d{7,20})}"
 
-if [ "${NTFY_ENABLED}" = "1" ]; then
-  if [ -z "${NTFY_TOPIC:-}" ]; then
-    echo "⚠️  NTFY_ENABLED=1 mais NTFY_TOPIC est vide → pas de notifications."
-  else
-    echo "▶️  ntfy: watcher activé (topic=${NTFY_TOPIC})"
-    # On exporte les vars pour le process enfant
-    export LOG_FILE REGEX
-    nohup /usr/bin/python3 /opt/sandstorm/log_notify_ntfy.py >/opt/sandstorm/ntfy.log 2>&1 &
-  fi
+# Regex principale : LogGameMode: Display: Player <id> '<name>' joined team <team>
+: "${REGEX:=LogGameMode:\s+Display:\s+Player\s+(?P<id>\d+)\s+'(?P<name>[^']+)'\s+joined\s+team\s+(?P<team>\d+)}"
+
+# Fallback plus souple (sans le préfixe LogGameMode)
+: "${FALLBACK_REGEX_1:=Player\s+(?P<id>\d+)\s+'(?P<name>[^']+)'\s+joined\s+team\s+(?P<team>\d+)}"
+
+if [ "${NTFY_ENABLED}" = "1" ] && [ -n "${NTFY_TOPIC:-}" ]; then
+  echo "▶️  ntfy: watcher activé (topic=${NTFY_TOPIC})"
+  export LOG_FILE REGEX FALLBACK_REGEX_1
+  nohup /usr/bin/python3 /opt/sandstorm/log_notify_ntfy.py \
+        >/opt/sandstorm/ntfy.log 2>&1 &
 else
-  echo "ℹ️  ntfy: désactivé (NTFY_ENABLED=0)"
+  echo "ℹ️  ntfy: désactivé (NTFY_ENABLED=${NTFY_ENABLED:-0}, topic='${NTFY_TOPIC:-<unset>}')"
 fi
+
 
 
 # ─────────────────────────────────────────
