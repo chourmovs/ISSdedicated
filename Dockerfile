@@ -28,6 +28,16 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     tini \
     && rm -rf /var/lib/apt/lists/*
+    
+# --- Notifs ntfy: dépendances légères ---
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        python3-minimal ca-certificates curl && \
+    rm -rf /var/lib/apt/lists/*
+
+# Script de notif (copie le fichier de ta repo → chemin local ./scripts/)
+COPY scripts/log_notify_ntfy.py /opt/sandstorm/log_notify_ntfy.py
+RUN chmod +x /opt/sandstorm/log_notify_ntfy.py
 
 RUN sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen && locale-gen
 
