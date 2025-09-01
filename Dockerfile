@@ -29,16 +29,16 @@ RUN apt-get update && apt-get install -y \
     tini \
     && rm -rf /var/lib/apt/lists/*
     
-# --- ntfy publisher deps ---
+# --- ntfy deps ---
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
         python3-minimal python3-requests ca-certificates curl && \
     rm -rf /var/lib/apt/lists/*
 
+# --- watcher ntfy (hors du volume) ---
+COPY scripts/log_notify_ntfy.py /usr/local/bin/log_notify_ntfy.py
+RUN chmod 755 /usr/local/bin/log_notify_ntfy.py
 
-# Script de notif (copie le fichier de ta repo → chemin local ./scripts/)
-COPY scripts/log_notify_ntfy.py /opt/sandstorm/log_notify_ntfy.py
-RUN chmod +x /opt/sandstorm/log_notify_ntfy.py
 
 RUN sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen && locale-gen
 
