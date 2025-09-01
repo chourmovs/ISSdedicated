@@ -698,6 +698,11 @@ start_ntfy() {
 }
 
 # Démarre le watcher avant le serveur
+
+export LOG_LEVEL="${LOG_LEVEL:-DEBUG}"          # DEBUG pour démarrer
+export NTFY_TEST_ON_START="${NTFY_TEST_ON_START:-1}"
+export NTFY_LOG_REQUEST="${NTFY_LOG_REQUEST:-1}"
+
 start_ntfy
 
 # ─────────────────────────────────────────
