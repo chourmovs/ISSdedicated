@@ -29,11 +29,12 @@ RUN apt-get update && apt-get install -y \
     tini \
     && rm -rf /var/lib/apt/lists/*
     
-# --- Notifs ntfy: dépendances légères ---
+# --- ntfy publisher deps ---
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-        python3-minimal ca-certificates curl && \
+        python3-minimal python3-requests ca-certificates curl && \
     rm -rf /var/lib/apt/lists/*
+
 
 # Script de notif (copie le fichier de ta repo → chemin local ./scripts/)
 COPY scripts/log_notify_ntfy.py /opt/sandstorm/log_notify_ntfy.py
