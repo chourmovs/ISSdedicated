@@ -11,6 +11,7 @@ Watcher Insurgency: Sandstorm → ntfy push (requests)
 import os, re, time, logging, base64, socket
 from pathlib import Path
 from datetime import datetime, timedelta
+from urllib.parse import urlencode
 import requests
 
 # ============= Config =============
@@ -65,35 +66,49 @@ def ntfy_post(title: str, message: str) -> int:
         logging.warning("ntfy_post appelé mais ENABLED=%s TOPIC='%s'", ENABLED, TOPIC)
         return -1
 
-    url = f"{SERVER}/{TOPIC}"
-    headers = {
-        "Title": title,
-        "Priority": str(PRIORITY),
-    }
-    if TAGS.strip():   headers["Tags"]  = TAGS
-    if CLICK_URL.strip(): headers["Click"] = CLICK_URL
+    base = f"{SERVER}/{TOPIC}"
+    params = {}
+    if title:
+        params["title"] = title          # unicode OK, sera %encodé
+    if str(PRIORITY).strip():
+        params["priority"] = str(PRIORITY)
+    if TAGS.strip():
+        params["tags"] = TAGS
+    if CLICK_URL.strip():
+        params["click"] = CLICK_URL
+
+    url = f"{base}?{urlencode(params)}" if params else base
+
+    headers = {}
+    # Optionnel: désactiver le cache côté ntfy.sh
+    if os.environ.get("NTFY_CACHE", "").lower() in {"no", "none", "false", "0"}:
+        headers["Cache"] = "no"
+
+    # Auth (ASCII only)
     if TOKEN:
         headers["Authorization"] = f"Bearer {TOKEN}"
     elif BASIC_USER and BASIC_PASS:
-        token = base64.b64encode(f"{BASIC_USER}:{BASIC_PASS}".encode("utf-8")).decode("ascii")
-        headers["Authorization"] = f"Basic {token}"
+        import base64
+        b64 = base64.b64encode(f"{BASIC_USER}:{BASIC_PASS}".encode("utf-8")).decode("ascii")
+        headers["Authorization"] = f"Basic {b64}"
 
     data = message.encode("utf-8")
 
-    if LOG_REQUEST:
-        preview = (message[:200] + "…") if len(message) > 200 else message
-        logging.info("ntfy POST → %s | Title='%s' | len(body)=%d | preview='%s'",
-                     url, title, len(data), preview.replace("\n", "\\n"))
+    # Logs verbeux
+    preview = (message[:200] + "…") if len(message) > 200 else message
+    logging.info("ntfy POST url=%s | body_len=%d | preview='%s'",
+                 url, len(data), preview.replace("\n", "\\n"))
 
     try:
         r = requests.post(url, data=data, headers=headers, timeout=10)
         logging.info("ntfy POST status=%s reason=%s", r.status_code, getattr(r, "reason", ""))
         if r.status_code >= 300:
-            logging.error("ntfy response body: %s", r.text[:500])
+            logging.error("ntfy response body: %s", r.text[:800])
         return r.status_code
     except requests.RequestException as e:
         logging.exception("ntfy POST failed: %s", e)
         return -2
+
 
 # ============= Tail -F =============
 def follow(path: Path):
