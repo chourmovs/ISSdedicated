@@ -1,4 +1,4 @@
-# app.py — ISS WebInfo v2 (FastAPI + SSE + A2S + Game.ini parser)
+# app.py — ISS WebInfo v2.5 (FastAPI + SSE + A2S + Game.ini + merge A2S/logs)
 import os, re, time, threading, asyncio, json
 from datetime import datetime, timedelta
 from collections import deque, Counter, defaultdict
@@ -6,17 +6,17 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 
 from fastapi import FastAPI
-from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 
 # ─────────────────────────────────────────────────────────
 # Config
 # ─────────────────────────────────────────────────────────
 LOG_FILE  = os.environ.get("LOG_FILE", "/opt/sandstorm/Insurgency/Saved/Logs/Insurgency.log")
 GAME_INI  = os.environ.get("GAME_INI", "/opt/sandstorm/Insurgency/Saved/Config/LinuxServer/Game.ini")
-# A2S: hôte/port du serveur (vu depuis ce container). Par défaut, le nom de service docker "sandstorm".
 A2S_HOST  = os.environ.get("A2S_HOST", "sandstorm")
-A2S_PORT  = int(os.environ.get("A2S_PORT", "27131"))  # QueryPort
+A2S_PORT  = int(os.environ.get("A2S_PORT", "27131"))  # QueryPort (UDP)
 A2S_POLL_INTERVAL = float(os.environ.get("A2S_POLL_INTERVAL", "5.0"))
+ROOT_PATH = os.environ.get("ROOT_PATH", "").strip()  # ex: "/iss" si tu veux
 
 # Regex logs
 JOIN_REGEX = re.compile(os.environ.get(
@@ -30,37 +30,29 @@ LEAVE_REGEX = re.compile(os.environ.get(
 JOIN_FALLBACK  = re.compile(r"Player\s+(?P<id>\d+)\s+'(?P<name>[^']+)'\s+joined\s+team\s+(?P<team>\d+)")
 LEAVE_FALLBACK = re.compile(r"Player\s+(?P<id>\d+)\s+'(?P<name>[^']+)'\s+left\s+team\s+(?P<team>\d+)")
 
-EVENT_HISTORY_MAX   = int(os.environ.get("EVENT_HISTORY_MAX", "600"))
-STATS_RETENTION_DAYS= int(os.environ.get("STATS_RETENTION_DAYS", "21"))
-ROOT_PATH           = os.environ.get("ROOT_PATH", "").strip()  # ex: "/iss" si tu veux
+EVENT_HISTORY_MAX = int(os.environ.get("EVENT_HISTORY_MAX", "600"))
 
 # ─────────────────────────────────────────────────────────
-# État global
+# État en mémoire
 # ─────────────────────────────────────────────────────────
-players_online: Dict[str, Dict[str, Any]] = {}   # id -> {id,name,team,since}
-name_to_team: Dict[str, str] = {}                # map rapide pour A2S (name -> team)
-events = deque(maxlen=EVENT_HISTORY_MAX)         # feed temps réel (join/leave)
-join_count_per_player = Counter()                # name -> count
-join_count_per_day = defaultdict(int)            # date -> count
+players_online: Dict[str, Dict[str, Any]] = {}  # id -> {id,name,team,since}
+name_to_team: Dict[str, str] = {}
+events = deque(maxlen=EVENT_HISTORY_MAX)
+join_count_per_player = Counter()
+join_count_per_day = defaultdict(int)
 last_line_ts: Optional[str] = None
 
-# Infos live A2S
 live_info: Dict[str, Any] = {
-    "ok": False,
-    "host": A2S_HOST, "port": A2S_PORT,
+    "ok": False, "host": A2S_HOST, "port": A2S_PORT,
     "hostname": None, "map": None, "player_count": 0, "max_players": 0,
-    "players": [],  # [{name, score, time, team?}]
-    "updated_at": None,
-    "round_start": None,  # ISO quand la map a changé
+    "players": [], "updated_at": None, "round_start": None,
 }
-playercount_series = deque(maxlen=720)  # ~1h si poll 5s → 720*5s=3600s
+playercount_series = deque(maxlen=720)  # ~1h si poll=5s
 series_started_at = datetime.utcnow()
 
-# Diffuseurs SSE
 subscribers = set()
 sub_lock = threading.Lock()
 
-# FastAPI
 app = FastAPI(root_path=ROOT_PATH or None)
 
 # ─────────────────────────────────────────────────────────
@@ -96,33 +88,27 @@ def record_event(ev_type: str, pid: str, name: str, team: str, line: str) -> Non
     events.append(ev)
     publish(ev)
 
-def cleanup_stats() -> None:
-    cutoff = datetime.utcnow().date() - timedelta(days=STATS_RETENTION_DAYS)
-    for day in list(join_count_per_day.keys()):
-        try: d = datetime.strptime(day, "%Y-%m-%d").date()
-        except: continue
-        if d < cutoff:
-            del join_count_per_day[day]
-
 # ─────────────────────────────────────────────────────────
-# Tail -F des logs (thread)
+# Tail -F des logs
 # ─────────────────────────────────────────────────────────
 def follow(path: Path):
-    f = None; sig = None
+    f=None; sig=None
     while True:
         try:
             st = path.stat()
-            if f is None or sig != (st.st_ino, st.st_dev) or f.tell() > st.st_size:
+            if f is None or sig!=(st.st_ino, st.st_dev) or f.tell()>st.st_size:
                 if f:
                     try: f.close()
                     except: pass
                 f = path.open("r", errors="ignore")
-                f.seek(0, 2)
-                sig = (st.st_ino, st.st_dev)
+                f.seek(0,2)
+                sig=(st.st_ino, st.st_dev)
                 print(f"[webinfo] open log {path} inode={sig}", flush=True)
             line = f.readline()
-            if line: yield line.rstrip("\r\n")
-            else: time.sleep(0.5)
+            if line:
+                yield line.rstrip("\r\n")
+            else:
+                time.sleep(0.5)
         except FileNotFoundError:
             time.sleep(1.0)
         except Exception as e:
@@ -140,117 +126,141 @@ def tail_thread():
             players_online[pid] = {"id": pid, "name": name, "team": team, "since": now_iso()}
             join_count_per_player[name] += 1
             join_count_per_day[datetime.utcnow().strftime("%Y-%m-%d")] += 1
-            cleanup_stats()
         else:
             players_online.pop(pid, None)
         record_event(ev["type"], pid, name, team, line)
 
 # ─────────────────────────────────────────────────────────
-# A2S poller (thread)
+# A2S (avec fallback fusion logs)
 # ─────────────────────────────────────────────────────────
+def _merge_players(a2s_players, players_online_dict):
+    """Fusionne joueurs A2S et ceux détectés dans les logs."""
+    by_name = {}
+    for p in a2s_players or []:
+        nm = (p.get("name") or "").strip()
+        if not nm:
+            continue
+        by_name[nm] = {
+            "name": nm,
+            "score": p.get("score"),
+            "time": p.get("time"),
+            "team": p.get("team"),
+        }
+    for _pid, pl in (players_online_dict or {}).items():
+        nm = (pl.get("name") or "").strip()
+        if not nm:
+            continue
+        if nm not in by_name:
+            by_name[nm] = {
+                "name": nm,
+                "score": None,
+                "time": None,
+                "team": pl.get("team"),
+            }
+        else:
+            if by_name[nm].get("team") is None and pl.get("team") is not None:
+                by_name[nm]["team"] = pl.get("team")
+    return list(by_name.values())
+
 def a2s_poller():
-    import a2s
-    global live_info
+    import a2s  # from python-a2s
     last_map = None
     while True:
         try:
             addr = (A2S_HOST, A2S_PORT)
             info = a2s.info(addr, timeout=2.0)
-            players = []
+
+            # A2S players (peut être vide)
+            players_a2s = []
             try:
-                pl = a2s.players(addr, timeout=2.0)
-                for p in pl:
-                    # p.name, p.score, p.duration (seconds)
-                    players.append({
+                for p in a2s.players(addr, timeout=2.0):
+                    players_a2s.append({
                         "name": p.name,
                         "score": getattr(p, "score", None),
                         "time": int(getattr(p, "duration", 0)),
-                        "team": name_to_team.get(p.name)  # best-effort via logs
+                        "team": name_to_team.get(p.name),
                     })
             except Exception as e:
                 print("[webinfo] A2S players failed:", e, flush=True)
+
+            # corrige player_count avec les logs si besoin
+            count_a2s = int(getattr(info, "player_count", 0) or 0)
+            count_logs = len(players_online)
+            eff_count = max(count_a2s, count_logs)
+            if eff_count != count_a2s:
+                print(f"[webinfo] A2S player_count={count_a2s} ; logs_count={count_logs} → using {eff_count}", flush=True)
+
+            players_merged = _merge_players(players_a2s, players_online)
 
             live_info.update({
                 "ok": True,
                 "hostname": getattr(info, "server_name", None),
                 "map": getattr(info, "map_name", None),
-                "player_count": getattr(info, "player_count", 0),
+                "player_count": eff_count,
                 "max_players": getattr(info, "max_players", 0),
-                "players": players,
-                "updated_at": now_iso()
+                "players": players_merged,
+                "updated_at": now_iso(),
             })
 
-            # round start heuristique: map a changé
+            # round start heuristique (map qui change)
             cur_map = live_info.get("map")
             if cur_map != last_map:
                 last_map = cur_map
                 live_info["round_start"] = now_iso()
 
-            # timeline joueurs
+            # timeline (1h)
             playercount_series.append({
                 "t": (datetime.utcnow()-series_started_at).total_seconds(),
-                "v": live_info["player_count"]
+                "v": eff_count,
             })
 
         except Exception as e:
-            live_info.update({
-                "ok": False,
-                "players": [],
-                "updated_at": now_iso()
-            })
+            live_info.update({"ok": False, "players": [], "updated_at": now_iso()})
             print("[webinfo] A2S info failed:", e, flush=True)
 
         time.sleep(A2S_POLL_INTERVAL)
 
 # ─────────────────────────────────────────────────────────
-# Parsing Game.ini (mods/mutators)
+# Game.ini parsing
 # ─────────────────────────────────────────────────────────
 def parse_game_ini(path: str):
     data = {
         "mods": [],
-        "mutators": {  # par mode Unreal
+        "mutators": {
             "Push": [], "Firefight": [], "Domination": [], "Skirmish": [],
             "Checkpoint": [], "Outpost": [], "Survival": []
         }
     }
     p = Path(path)
-    if not p.exists():
-        return data
+    if not p.exists(): return data
 
     section = None
-    modes_map = {
-        "/Script/Insurgency.INSPushGameMode": "Push",
-        "/Script/Insurgency.INSFirefightGameMode": "Firefight",
-        "/Script/Insurgency.INSDominationGameMode": "Domination",
-        "/Script/Insurgency.INSSkirmishGameMode": "Skirmish",
-        "/Script/Insurgency.INSCheckpointGameMode": "Checkpoint",
-        "/Script/Insurgency.INSOutpostGameMode": "Outpost",
-        "/Script/Insurgency.INSSurvivalGameMode": "Survival",
+    modes = {
+        "/Script/Insurgency.INSPushGameMode":"Push",
+        "/Script/Insurgency.INSFirefightGameMode":"Firefight",
+        "/Script/Insurgency.INSDominationGameMode":"Domination",
+        "/Script/Insurgency.INSSkirmishGameMode":"Skirmish",
+        "/Script/Insurgency.INSCheckpointGameMode":"Checkpoint",
+        "/Script/Insurgency.INSOutpostGameMode":"Outpost",
+        "/Script/Insurgency.INSSurvivalGameMode":"Survival",
     }
     try:
         with p.open("r", errors="ignore") as f:
             for raw in f:
                 line = raw.strip()
-                if not line or line.startswith(";"):
-                    continue
+                if not line or line.startswith(";"): continue
                 if line.startswith("[") and line.endswith("]"):
-                    section = line[1:-1]
-                    continue
+                    section = line[1:-1]; continue
                 if "Mods=" in line:
                     val = line.split("=",1)[1].strip()
-                    if val:
-                        data["mods"].append(val)
-                if "Mutators=" in line and section in modes_map:
-                    val = line.split("=",1)[1].strip()
-                    if val:
-                        # split CSV propre
-                        muts = [m.strip() for m in val.split(",") if m.strip()]
-                        data["mutators"][modes_map[section]] = muts
+                    if val: data["mods"].append(val)
+                if "Mutators=" in line and section in modes:
+                    muts = [m.strip() for m in line.split("=",1)[1].split(",") if m.strip()]
+                    data["mutators"][modes[section]] = muts
     except Exception as e:
         print("[webinfo] parse Game.ini failed:", e, flush=True)
     return data
 
-# state initial (chargé à la demande aussi)
 _config_cache = None
 def get_config():
     global _config_cache
@@ -259,7 +269,7 @@ def get_config():
     return _config_cache
 
 # ─────────────────────────────────────────────────────────
-# Boot des threads
+# Boot threads
 # ─────────────────────────────────────────────────────────
 _started = False
 def ensure_started():
@@ -280,7 +290,7 @@ def health():
         "log_file": LOG_FILE,
         "game_ini": GAME_INI,
         "players_online": len(players_online),
-        "last_line_ts": last_line_ts
+        "last_line_ts": last_line_ts,
     }
 
 @app.get("/api/players")
@@ -293,13 +303,12 @@ def api_config():
 
 @app.get("/api/live")
 def api_live():
-    # fusionne team depuis logs si trouvable
     live = dict(live_info)
+    # ajoute team depuis logs si manquante
     live["players"] = [
         {**p, "team": p.get("team") or name_to_team.get(p.get("name") or "", None)}
         for p in live_info.get("players", [])
     ]
-    # durée round en secondes (depuis change de map)
     if live.get("round_start"):
         try:
             started = datetime.fromisoformat(live["round_start"].replace("Z",""))
@@ -339,6 +348,26 @@ async def sse():
     headers = {"Cache-Control": "no-cache"}
     return StreamingResponse(gen(), media_type="text/event-stream", headers=headers)
 
+# (debug facultatif)
+@app.get("/api/debug/a2s")
+def api_debug_a2s():
+    try:
+        import a2s
+        info = a2s.info((A2S_HOST, A2S_PORT), timeout=2.0)
+        players = a2s.players((A2S_HOST, A2S_PORT), timeout=2.0)
+        return {
+            "ok": True,
+            "info": {
+                "server_name": getattr(info, "server_name", None),
+                "map_name": getattr(info, "map_name", None),
+                "player_count": getattr(info, "player_count", None),
+                "max_players": getattr(info, "max_players", None),
+            },
+            "players": [{"name": p.name, "score": getattr(p,"score",None), "time": int(getattr(p,"duration",0))} for p in players],
+        }
+    except Exception as e:
+        return {"ok": False, "error": repr(e), "host": A2S_HOST, "port": A2S_PORT}
+
 # ─────────────────────────────────────────────────────────
 # UI
 # ─────────────────────────────────────────────────────────
@@ -348,7 +377,7 @@ INDEX_HTML = """
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>ISS Dashboard</title>
+  <title>Insurgency Sandstorm • Dashboard</title>
   <style>
     :root{
       --bg:#0b0f14; --panel:#111827; --muted:#94a3b8; --fg:#e5e7eb; --accent:#10b981; --accent2:#60a5fa;
@@ -439,7 +468,7 @@ INDEX_HTML = """
   const topEl     = document.getElementById('topplayers');
 
   function h(ts){ try { return new Date(ts).toLocaleString(); } catch { return ts; } }
-  function fmtDur(s){ if(!s&&s!==0) return '—'; s=+s; const m=Math.floor(s/60), sec=s%60; return m+'m '+sec+'s'; }
+  function fmtDur(s){ if(s==null) return '—'; s=+s; const m=Math.floor(s/60), sec=s%60; return m+'m '+sec+'s'; }
 
   function renderKV(obj){
     livekv.innerHTML='';
@@ -513,7 +542,6 @@ INDEX_HTML = """
   }
 
   async function loadAll(){
-    // one-shot snapshot complet
     const s = await fetch(api('api/summary')).then(r=>r.json());
     renderConfig(s.config||{});
     renderKV(s.live||{});
@@ -528,7 +556,8 @@ INDEX_HTML = """
     });
     // bandeau
     const health = await fetch(api('api/health')).then(r=>r.json());
-    lfEl.textContent = `Log: ${health.log_file} • Game.ini: ${health.game_ini} • last update: ${health.last_line_ts||'—'}`;
+    document.getElementById('lf').textContent =
+      `Log: ${health.log_file} • Game.ini: ${health.game_ini} • last update: ${health.last_line_ts||'—'}`;
   }
 
   // rafraîchissement live A2S (toutes les 5s)
@@ -559,5 +588,3 @@ INDEX_HTML = """
 @app.get("/", response_class=HTMLResponse)
 def index():
     return HTMLResponse(INDEX_HTML)
-
-
