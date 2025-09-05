@@ -1,10 +1,9 @@
 name: Build & Push Images
-
 on:
   workflow_dispatch:
 
 jobs:
-  docker:
+  build-main:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -17,8 +16,8 @@ jobs:
         run: |
           USER_LC="$(echo "${{ secrets.DOCKERHUB_USER }}" | tr '[:upper:]' '[:lower:]')"
           REPO_LC="$(echo "${GITHUB_REPOSITORY#*/}" | tr '[:upper:]' '[:lower:]')"
-          echo "user=${USER_LC}"      >> "$GITHUB_OUTPUT"
-          echo "repo=${REPO_LC}"      >> "$GITHUB_OUTPUT"
+          echo "user=${USER_LC}" >> "$GITHUB_OUTPUT"
+          echo "repo=${REPO_LC}" >> "$GITHUB_OUTPUT"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -32,33 +31,77 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USER }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # On construit 2 images via une matrice :
-      # - main (serveur) : contexte racine, Dockerfile racine
-      # - webinfo        : contexte ./webinfo, Dockerfile ./webinfo/Dockerfile
-      - name: Build & Push (matrix)
+      - name: Extract metadata (main)
+        id: meta_main
+        uses: docker/metadata-action@v5
+        with:
+          images: docker.io/${{ steps.base.outputs.user }}/${{ steps.base.outputs.repo }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=tag
+            type=sha
+            latest
+
+      - name: Build & Push (main)
         uses: docker/build-push-action@v6
         with:
+          context: .
+          file: ./Dockerfile
           push: true
           platforms: linux/amd64
-          # -------- matrix manuelle --------
-          # On passe plusieurs targets via 'build-args-json' pour exécuter 2 builds:
-          # Astuce: on appelle 2 fois build-push-action avec 'strategy.matrix'
-        strategy:
-          matrix:
-            target:
-              - name: main
-                context: .
-                file: ./Dockerfile
-                image_suffix: ""
-              - name: webinfo
-                context: ./webinfo
-                file: ./webinfo/Dockerfile
-                image_suffix: "-webinfo"
-        with:
-          context: ${{ matrix.target.context }}
-          file: ${{ matrix.target.file }}
+          tags: ${{ steps.meta_main.outputs.tags }}
+          labels: ${{ steps.meta_main.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          # no-cache: true   # décommente une fois pour forcer un rebuild total
+
+  build-webinfo:
+    runs-on: ubuntu-latest
+    needs: build-main
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Lowercase Docker Hub user & repo
+        id: base
+        run: |
+          USER_LC="$(echo "${{ secrets.DOCKERHUB_USER }}" | tr '[:upper:]' '[:lower:]')"
+          REPO_LC="$(echo "${GITHUB_REPOSITORY#*/}" | tr '[:upper:]' '[:lower:]')"
+          echo "user=${USER_LC}" >> "$GITHUB_OUTPUT"
+          echo "repo=${REPO_LC}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USER }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Extract metadata (webinfo)
+        id: meta_web
+        uses: docker/metadata-action@v5
+        with:
+          images: docker.io/${{ steps.base.outputs.user }}/${{ steps.base.outputs.repo }}-webinfo
           tags: |
-            docker.io/${{ steps.base.outputs.user }}/${{ steps.base.outputs.repo }}${{ matrix.target.image_suffix }}:sha-${{ github.sha }}
-            docker.io/${{ steps.base.outputs.user }}/${{ steps.base.outputs.repo }}${{ matrix.target.image_suffix }}:latest
+            type=ref,event=branch
+            type=ref,event=tag
+            type=sha
+            latest
+
+      - name: Build & Push (webinfo)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./webinfo
+          file: ./webinfo/Dockerfile
+          push: true
+          platforms: linux/amd64
+          tags: ${{ steps.meta_web.outputs.tags }}
+          labels: ${{ steps.meta_web.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          # no-cache: true
