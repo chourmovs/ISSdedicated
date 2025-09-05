@@ -1,4 +1,4 @@
-# app.py — ISS WebInfo v3 (FastAPI + SSE + A2S + Game.ini + MapCycle + Admins + Rules)
+# app.py — ISS WebInfo v3.1 (FastAPI + SSE + A2S + Game.ini + MapCycle + Admins + Rules) — thread-safe hotfix
 import os, re, time, threading, asyncio, json
 from datetime import datetime
 from collections import deque, Counter, defaultdict
@@ -30,7 +30,9 @@ LEAVE_REGEX = re.compile(os.environ.get(
 JOIN_FALLBACK  = re.compile(r"Player\s+(?P<id>\d+)\s+'(?P<name>[^']+)'\s+joined\s+team\s+(?P<team>\d+)")
 LEAVE_FALLBACK = re.compile(r"Player\s+(?P<id>\d+)\s+'(?P<name>[^']+)'\s+left\s+team\s+(?P<team>\d+)")
 
-# ───────── État mémoire
+# ───────── État mémoire + verrou
+STATE_LOCK = threading.RLock()
+
 players_online: Dict[str, Dict[str, Any]] = {}
 name_to_team: Dict[str, str] = {}
 events = deque(maxlen=EVENT_HISTORY_MAX)
@@ -75,9 +77,12 @@ def publish(ev: Dict[str, Any]):
 
 def record_event(ev_type, pid, name, team, line):
     global last_line_ts
-    ts = now_iso(); last_line_ts = ts
+    ts = now_iso()
     ev = {"ts": ts, "type": ev_type, "id": pid, "name": name, "team": team, "line": line[:400]}
-    events.append(ev); publish(ev)
+    with STATE_LOCK:
+        last_line_ts = ts
+        events.append(ev)
+    publish(ev)
 
 # ───────── Tail -F
 def follow(path: Path):
@@ -105,13 +110,14 @@ def tail_thread():
         ev = parse_join(line) or parse_leave(line)
         if not ev: continue
         pid,name,team = ev["id"],ev["name"],ev["team"]
-        name_to_team[name]=team
-        if ev["type"]=="join":
-            players_online[pid]={"id":pid,"name":name,"team":team,"since":now_iso()}
-            join_count_per_player[name]+=1
-            join_count_per_day[datetime.utcnow().strftime("%Y-%m-%d")]+=1
-        else:
-            players_online.pop(pid, None)
+        with STATE_LOCK:
+            name_to_team[name]=team
+            if ev["type"]=="join":
+                players_online[pid]={"id":pid,"name":name,"team":team,"since":now_iso()}
+                join_count_per_player[name]+=1
+                join_count_per_day[datetime.utcnow().strftime("%Y-%m-%d")]+=1
+            else:
+                players_online.pop(pid, None)
         record_event(ev["type"], pid, name, team, line)
 
 # ───────── A2S + merge
@@ -140,38 +146,40 @@ def a2s_poller():
             players_a2s=[]
             try:
                 for p in a2s.players(addr, timeout=2.0):
+                    with STATE_LOCK:
+                        team = name_to_team.get(p.name)
                     players_a2s.append({
                         "name": p.name,
                         "score": getattr(p,"score",None),
                         "time": int(getattr(p,"duration",0)),
-                        "team": name_to_team.get(p.name),
+                        "team": team,
                     })
             except Exception as e:
                 print("[webinfo] A2S players failed:", e, flush=True)
 
             count_a2s=int(getattr(info,"player_count",0) or 0)
-            count_logs=len(players_online)
+            with STATE_LOCK:
+                count_logs=len(players_online)
             eff_count=max(count_a2s, count_logs)
             if eff_count!=count_a2s:
                 print(f"[webinfo] A2S player_count={count_a2s} ; logs_count={count_logs} → using {eff_count}", flush=True)
 
-            live_info.update({
-                "ok": True,
-                "hostname": getattr(info,"server_name",None),
-                "map": getattr(info,"map_name",None),
-                "player_count": eff_count,
-                "max_players": getattr(info,"max_players",0),
-                "players": _merge_players(players_a2s, players_online),
-                "updated_at": now_iso(),
-            })
-
-            # round (map change)
-            cur_map=live_info.get("map")
-            if cur_map!=last_map:
-                last_map=cur_map; live_info["round_start"]=now_iso()
-
-            # timeseries
-            playercount_series.append({"t": (datetime.utcnow()-series_started_at).total_seconds(), "v": eff_count})
+            with STATE_LOCK:
+                merged_players = _merge_players(players_a2s, players_online)
+                live_info.update({
+                    "ok": True,
+                    "hostname": getattr(info,"server_name",None),
+                    "map": getattr(info,"map_name",None),
+                    "player_count": eff_count,
+                    "max_players": getattr(info,"max_players",0),
+                    "players": merged_players,
+                    "updated_at": now_iso(),
+                })
+                cur_map=live_info.get("map")
+                if cur_map!=last_map:
+                    last_map=cur_map
+                    live_info["round_start"]=now_iso()
+                playercount_series.append({"t": (datetime.utcnow()-series_started_at).total_seconds(), "v": eff_count})
 
             # A2S rules 1 fois sur 3
             i=(i+1)%3
@@ -179,21 +187,22 @@ def a2s_poller():
                 try:
                     rules=a2s.rules(addr, timeout=2.0)  # dict
                     # normalise en str pour JSON
-                    a2s_rules_cache["data"]={str(k): (str(v) if not isinstance(v,(int,float,bool)) else v) for k,v in (rules or {}).items()}
-                    a2s_rules_cache["ts"]=now_iso()
-                except Exception as e:
-                    # beaucoup de jeux ne supportent pas; on ignore
+                    with STATE_LOCK:
+                        a2s_rules_cache["data"]={str(k): (str(v) if not isinstance(v,(int,float,bool)) else v) for k,v in (rules or {}).items()}
+                        a2s_rules_cache["ts"]=now_iso()
+                except Exception:
                     pass
 
         except Exception as e:
-            live_info.update({"ok":False,"players":[],"updated_at":now_iso()})
+            with STATE_LOCK:
+                live_info.update({"ok":False,"players":[],"updated_at":now_iso()})
             print("[webinfo] A2S info failed:", e, flush=True)
 
         time.sleep(A2S_POLL_INTERVAL)
 
 # ───────── Parse fichiers config (Game.ini / MapCycle / Admins)
 def _read_lines(path: str) -> List[str]:
-    p=Path(path); 
+    p=Path(path)
     if not p.exists(): return []
     try:
         return [l.rstrip("\r\n") for l in p.read_text(errors="ignore").splitlines()]
@@ -224,11 +233,10 @@ def parse_game_ini(path: str):
             if "Mods=" in line:
                 v=line.split("=",1)[1].strip()
                 if v: data["mods"].append(v)
-            if "Mutators=" in line and section in modes and modes[section]!="__ignore__":
+            if "Mutators=" in line and section in modes and modes[section]!="__ignore__":  # noqa
                 muts=[m.strip() for m in line.split("=",1)[1].split(",") if m.strip()]
-                if section in modes and modes[section]!="__ignore__":
-                    if modes[section] in data["mutators"]:
-                        data["mutators"][modes[section]]=muts
+                if modes[section] in data["mutators"]:
+                    data["mutators"][modes[section]]=muts
             if section=="/Script/Insurgency.INSGameMode" and line.lower().startswith("bdisablestats="):
                 v=line.split("=",1)[1].strip().lower()
                 data["stats_enabled"] = (v!="true")
@@ -247,25 +255,29 @@ def parse_mapcycle(path: str):
 
 def parse_admins(path: str):
     lines=_read_lines(path)
-    ids=[ln.strip() for ln in lines if ln.strip() and ln.strip()[0].isdigit()]
+    ids=[]
+    for ln in lines:
+        s=ln.strip()
+        if not s: continue
+        if s[0].isdigit():
+            ids.append(s)
     return ids
 
 def guess_ranked(stats_enabled: Optional[bool], rules: Dict[str,Any]):
-    # heuristique : stats ON + keywords contenant "gs", "gamestats", "ranked", "gslT"
     kw=(rules.get("keywords") or rules.get("Keywords") or rules.get("tags") or rules.get("Tag") or "")
     kws=str(kw).lower()
     if stats_enabled is False: return False
-    if stats_enabled is True and any(x in kws for x in ("gs","gamestats","ranked","gsl", "xp")):
+    if stats_enabled is True and any(x in kws for x in ("gs","gamestats","ranked","gsl","xp")):
         return True
     return None  # inconnu
 
-_config_cache=None
 def get_config_bundle():
-    global _config_cache
     gi=parse_game_ini(GAME_INI)
     mc=parse_mapcycle(MAPCYCLE)
     admins=parse_admins(ADMINS_TXT)
-    rules=a2s_rules_cache.get("data",{}) or {}
+    with STATE_LOCK:
+        rules=a2s_rules_cache.get("data",{}) or {}
+        rules_ts=a2s_rules_cache.get("ts")
     ranked = guess_ranked(gi.get("stats_enabled"), rules)
     return {
         "mods": gi["mods"], "mutators": gi["mutators"],
@@ -274,7 +286,7 @@ def get_config_bundle():
         "mapcycle": mc,
         "admins": admins,
         "rules": rules,
-        "rules_ts": a2s_rules_cache.get("ts"),
+        "rules_ts": rules_ts,
     }
 
 # ───────── Boot
@@ -287,21 +299,27 @@ def ensure_started():
     threading.Thread(target=a2s_poller, daemon=True).start()
 ensure_started()
 
-# ───────── API
+# ───────── API (snapshots sous verrou)
 @app.get("/api/health")
 def health():
-    return {"ok":True,"log_file":LOG_FILE,"game_ini":GAME_INI,"mapcycle":MAPCYCLE,"admins_file":ADMINS_TXT,
-            "players_online":len(players_online),"last_line_ts":last_line_ts}
+    with STATE_LOCK:
+        return {"ok":True,"log_file":LOG_FILE,"game_ini":GAME_INI,"mapcycle":MAPCYCLE,"admins_file":ADMINS_TXT,
+                "players_online":len(players_online),"last_line_ts":last_line_ts}
 
 @app.get("/api/live")
 def api_live():
-    live=dict(live_info)
-    live["players"]=[{**p,"team":p.get("team") or name_to_team.get(p.get("name") or "", None)} for p in live_info.get("players",[])]
-    if live.get("round_start"):
+    with STATE_LOCK:
+        live=dict(live_info)
+        # fusion team par nom si besoin
+        live_players=[{**p,"team":p.get("team") or name_to_team.get(p.get("name") or "", None)} for p in live_info.get("players",[])]
+        live["players"]=live_players
+        rs=live.get("round_start")
+    if rs:
         try:
-            started=datetime.fromisoformat(live["round_start"].replace("Z",""))
+            started=datetime.fromisoformat(rs.replace("Z",""))
             live["round_elapsed"]=int((datetime.utcnow()-started).total_seconds())
-        except: live["round_elapsed"]=None
+        except:
+            live["round_elapsed"]=None
     else:
         live["round_elapsed"]=None
     return live
@@ -312,13 +330,24 @@ def api_config():
 
 @app.get("/api/summary")
 def summary():
-    return {"online":list(players_online.values()),
-            "events":list(events)[-80:],
-            "join_per_player": join_count_per_player.most_common(25),
-            "join_per_day": dict(join_count_per_day),
-            "config": get_config_bundle(),
-            "live": api_live(),
-            "series": list(playercount_series)}
+    try:
+        with STATE_LOCK:
+            online=list(players_online.values())
+            ev=list(events)[-80:]
+            jpp = join_count_per_player.most_common(25)
+            jpd = dict(join_count_per_day)
+            series=list(playercount_series)
+        return {"online": online,
+                "events": ev,
+                "join_per_player": jpp,
+                "join_per_day": jpd,
+                "config": get_config_bundle(),
+                "live": api_live(),
+                "series": series}
+    except Exception as e:
+        # Ne laisse jamais tomber le front
+        return {"error": str(e), "online": [], "events": [], "join_per_player": [], "join_per_day": {}, 
+                "config": get_config_bundle(), "live": api_live(), "series": []}
 
 @app.get("/events")
 async def sse():
@@ -332,9 +361,10 @@ async def sse():
                 yield f"data: {data}\n\n"
         finally:
             with sub_lock: subscribers.discard(q)
-    return StreamingResponse(gen(), media_type="text/event-stream", headers={"Cache-Control":"no-cache"})
+    headers={"Cache-Control":"no-cache", "X-Accel-Buffering":"no"}
+    return StreamingResponse(gen(), media_type="text/event-stream", headers=headers)
 
-# ───────── UI
+# ───────── UI (JS robuste + URLs relatives)
 INDEX_HTML = """
 <!doctype html><html lang="fr"><head>
 <meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
@@ -424,8 +454,8 @@ canvas{background:#0a0f17;border:1px solid var(--border);border-radius:10px;padd
 </div>
 
 <script>
-const BASE = window.location.pathname.endsWith('/') ? window.location.pathname : window.location.pathname + '/';
-const api  = (p) => BASE + p;
+// URLs relatives => fonctionne derrière un sous-chemin (/iss) sans config spéciale
+const api  = (p) => (p.startsWith('/') ? p.slice(1) : p);
 
 const onlineEl=document.getElementById('online');
 const lfEl=document.getElementById('lf');
@@ -462,10 +492,12 @@ function renderPlayers(list){
 
 let chartSeries;
 function renderSeries(series){
-  const labels=series.map(p=>(p.t/60).toFixed(1)), data=series.map(p=>p.v);
-  const ctx=document.getElementById('chartSeries').getContext('2d'); if(chartSeries) chartSeries.destroy();
-  chartSeries=new Chart(ctx,{type:'line',data:{labels,datasets:[{label:'Joueurs',data,tension:.25,fill:true}]},
-    options:{responsive:true,plugins:{legend:{display:false}},scales:{x:{title:{display:true,text:'minutes'}}}});
+  try{
+    const labels=series.map(p=>(p.t/60).toFixed(1)), data=series.map(p=>p.v);
+    const ctx=document.getElementById('chartSeries').getContext('2d'); if(chartSeries) chartSeries.destroy();
+    chartSeries=new Chart(ctx,{type:'line',data:{labels,datasets:[{label:'Joueurs',data,tension:.25,fill:true}]},
+      options:{responsive:true,plugins:{legend:{display:false}},scales:{x:{title:{display:true,text:'minutes'}}}}});
+  }catch(e){}
 }
 
 function renderCfgMain(cfg){
@@ -495,7 +527,6 @@ function renderRules(r){
   if(!r||Object.keys(r).length===0){ rulesDiv.textContent='(pas de données rules A2S)'; return; }
   const keys=['game','version','keywords','secure','vac','password','dedicated'];
   keys.forEach(k=>{ if(r[k]!=null) lines.push(`${k}: ${r[k]}`); });
-  // dump extra keys if any
   Object.keys(r).sort().forEach(k=>{ if(!keys.includes(k)) lines.push(`${k}: ${r[k]}`);});
   rulesDiv.innerHTML='<pre>'+lines.join('\\n')+'</pre>';
 }
@@ -503,7 +534,6 @@ function renderList(ul, items){
   ul.innerHTML=''; (items||[]).forEach(v=>{const li=document.createElement('li'); li.textContent=v; ul.appendChild(li);});
   if(!(items||[]).length){ const li=document.createElement('li'); li.textContent='—'; ul.appendChild(li); }
 }
-
 function appendEvent(ev){
   const row=document.createElement('div'); const t=ev.type==='join'?'🟢 join':ev.type==='leave'?'🔴 leave':'ℹ️';
   row.textContent=`[${h(ev.ts)}] ${t} ${ev.name} (id:${ev.id}) team:${ev.team}`; eventsEl.appendChild(row);
@@ -511,24 +541,28 @@ function appendEvent(ev){
 }
 
 async function boot(){
-  const s=await fetch(api('api/summary')).then(r=>r.json());
-  renderLiveKV(s.live||{}); renderPlayers((s.live&&s.live.players)||[]); renderSeries(s.series||[]);
-  const cfg=s.config||{};
-  renderCfgMain(cfg); renderMutators(cfg); renderRules(cfg.rules||{}); renderList(mcUl, cfg.mapcycle||[]); renderList(adminsUl, cfg.admins||[]);
-  // top joins
-  topUl.innerHTML=''; (s.join_per_player||[]).forEach(([n,c])=>{const li=document.createElement('li'); li.className='row'; li.innerHTML=`<div>${n}</div><div class="badge">${c} joins</div>`; topUl.appendChild(li);});
-  // bandeau fichier
-  const health=await fetch(api('api/health')).then(r=>r.json());
-  lfEl.textContent=`Log: ${health.log_file} • Game.ini: ${health.game_ini} • MapCycle: ${health.mapcycle} • last update: ${health.last_line_ts||'—'}`;
+  try{
+    const s=await fetch(api('api/summary')).then(r=>r.json());
+    renderLiveKV(s.live||{}); renderPlayers((s.live&&s.live.players)||[]); renderSeries(s.series||[]);
+    const cfg=s.config||{};
+    renderCfgMain(cfg); renderMutators(cfg); renderRules(cfg.rules||{}); renderList(mcUl, cfg.mapcycle||[]); renderList(adminsUl, cfg.admins||[]);
+    topUl.innerHTML=''; (s.join_per_player||[]).forEach(([n,c])=>{const li=document.createElement('li'); li.className='row'; li.innerHTML=`<div>${n}</div><div class="badge">${c} joins</div>`; topUl.appendChild(li);});
+    const health=await fetch(api('api/health')).then(r=>r.json());
+    lfEl.textContent=`Log: ${health.log_file} • Game.ini: ${health.game_ini} • MapCycle: ${health.mapcycle} • last update: ${health.last_line_ts||'—'}`;
+  }catch(e){
+    // Affiche au moins le bandeau d'erreur pour éviter un écran "vide"
+    lfEl.textContent='(impossible de charger les données initiales)';
+  }
 }
 async function refreshLive(){
-  try{ const live=await fetch(api('api/live')).then(r=>r.json());
+  try{
+    const live=await fetch(api('api/live')).then(r=>r.json());
     renderLiveKV(live||{}); renderPlayers((live&&live.players)||[]);
   }catch(e){}
 }
 setInterval(refreshLive, 5000);
 
-// SSE
+// SSE (relatif)
 const es=new EventSource(api('events'));
 es.onmessage=(e)=>{ if(!e.data) return; const ev=JSON.parse(e.data); if(ev.type==='hello') return; appendEvent(ev); };
 
@@ -538,4 +572,5 @@ boot();
 """
 
 @app.get("/", response_class=HTMLResponse)
-def index(): return HTMLResponse(INDEX_HTML)
+def index():
+    return HTMLResponse(INDEX_HTML)
