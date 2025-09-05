@@ -1,8 +1,10 @@
 FROM python:3.11-slim
 
 WORKDIR /app
-# libs minimalistes pour FastAPI + A2S
-RUN pip install --no-cache-dir fastapi uvicorn a2s
+# FastAPI + Uvicorn + A2S (le bon paquet est "python-a2s")
+RUN pip install --no-cache-dir fastapi uvicorn && \
+    pip uninstall -y a2s || true && \
+    pip install --no-cache-dir "python-a2s>=3.4.0"
 
 COPY app.py /app/app.py
 
