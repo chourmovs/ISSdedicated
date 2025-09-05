@@ -1,4 +1,4 @@
-name: Build & Push Sandstorm Image
+name: Build & Push Images
 
 on:
   workflow_dispatch:
@@ -8,17 +8,17 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      # packages: write  # pas nécessaire pour Docker Hub
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set image name (lowercase for Docker Hub)
-        id: img
+      - name: Lowercase Docker Hub user & repo
+        id: base
         run: |
           USER_LC="$(echo "${{ secrets.DOCKERHUB_USER }}" | tr '[:upper:]' '[:lower:]')"
           REPO_LC="$(echo "${GITHUB_REPOSITORY#*/}" | tr '[:upper:]' '[:lower:]')"
-          echo "image=docker.io/${USER_LC}/${REPO_LC}" >> "$GITHUB_OUTPUT"
+          echo "user=${USER_LC}"      >> "$GITHUB_OUTPUT"
+          echo "repo=${REPO_LC}"      >> "$GITHUB_OUTPUT"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -32,23 +32,33 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USER }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Extract metadata (tags, labels)
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ steps.img.outputs.image }}
-          tags: |
-            type=ref,event=branch
-            type=ref,event=tag
-            type=sha
-
-      - name: Build & Push
+      # On construit 2 images via une matrice :
+      # - main (serveur) : contexte racine, Dockerfile racine
+      # - webinfo        : contexte ./webinfo, Dockerfile ./webinfo/Dockerfile
+      - name: Build & Push (matrix)
         uses: docker/build-push-action@v6
         with:
-          context: .
           push: true
           platforms: linux/amd64
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          # -------- matrix manuelle --------
+          # On passe plusieurs targets via 'build-args-json' pour exécuter 2 builds:
+          # Astuce: on appelle 2 fois build-push-action avec 'strategy.matrix'
+        strategy:
+          matrix:
+            target:
+              - name: main
+                context: .
+                file: ./Dockerfile
+                image_suffix: ""
+              - name: webinfo
+                context: ./webinfo
+                file: ./webinfo/Dockerfile
+                image_suffix: "-webinfo"
+        with:
+          context: ${{ matrix.target.context }}
+          file: ${{ matrix.target.file }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          tags: |
+            docker.io/${{ steps.base.outputs.user }}/${{ steps.base.outputs.repo }}${{ matrix.target.image_suffix }}:sha-${{ github.sha }}
+            docker.io/${{ steps.base.outputs.user }}/${{ steps.base.outputs.repo }}${{ matrix.target.image_suffix }}:latest
